@@ -1,0 +1,108 @@
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Layers, Menu, X, ArrowRight } from 'lucide-react';
+import { Button } from '../ui/Button';
+
+export const Navbar: React.FC = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
+
+  const navLinks = [
+    { label: 'Explore Resources', path: '/discover' },
+    { label: 'Institutions', path: '/institutions' },
+    { label: 'How It Works', path: '/#how-it-works' },
+  ];
+
+  return (
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-slate-200/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="h-9 w-9 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm shadow-brand-500/20 group-hover:bg-brand-700 transition-colors">
+              <Layers className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-slate-900 tracking-tight leading-tight flex items-center gap-1.5">
+                ResourceBridge
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200">
+                  Campus
+                </span>
+              </span>
+              <span className="text-[11px] text-slate-500 font-medium">Educational Resource Sharing</span>
+            </div>
+          </Link>
+
+          {/* Desktop Nav Links */}
+          <nav className="hidden md:flex items-center gap-6">
+            {navLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                className={`text-sm font-medium transition-colors hover:text-brand-600 ${
+                  location.pathname === link.path ? 'text-brand-600' : 'text-slate-600'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Desktop CTA actions */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link to="/login">
+              <Button variant="ghost" size="sm">
+                Log in
+              </Button>
+            </Link>
+            <Link to="/register">
+              <Button variant="primary" size="sm" rightIcon={<ArrowRight className="h-4 w-4" />}>
+                Get Started
+              </Button>
+            </Link>
+          </div>
+
+          {/* Mobile menu button */}
+          <div className="flex md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile menu dropdown */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-b border-slate-200 bg-white px-4 pt-2 pb-4 space-y-2">
+          {navLinks.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:bg-slate-100"
+            >
+              {link.label}
+            </Link>
+          ))}
+          <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
+            <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="w-full">
+              <Button variant="secondary" className="w-full justify-center">
+                Log in
+              </Button>
+            </Link>
+            <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="w-full">
+              <Button variant="primary" className="w-full justify-center">
+                Create Account
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+};

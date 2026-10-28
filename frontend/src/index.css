@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: 12 141 233;
+    --color-primary-hover: 2 111 199;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-slate-900;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm rounded-lg px-4 py-2 text-sm;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100 shadow-sm rounded-lg px-4 py-2 text-sm;
+  }
+
+  .card-surface {
+    @apply bg-white border border-slate-200/80 rounded-xl shadow-sm hover:shadow-md transition-shadow;
+  }
+}
