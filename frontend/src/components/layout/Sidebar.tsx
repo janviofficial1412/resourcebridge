@@ -60,17 +60,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
       icon: <Compass className="h-4 w-4" />,
     },
     {
+      label: 'Institutions',
+      path: '/institutions',
+      icon: <Building2 className="h-4 w-4" />,
+    },
+    {
       label: 'My Resources',
       path: '/my-resources',
       icon: <Briefcase className="h-4 w-4" />,
       badge: 'Phase 5',
-      badgeType: 'roadmap',
-    },
-    {
-      label: 'Institutions',
-      path: '/institutions',
-      icon: <Building2 className="h-4 w-4" />,
-      badge: 'Phase 4',
       badgeType: 'roadmap',
     },
     {
@@ -80,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
     },
   ];
 
-  const userInitial = (user?.fullName || user?.email || 'U').charAt(0).toUpperCase();
+  const userInitial = (user?.username || user?.fullName || 'U').charAt(0).toUpperCase();
 
   return (
     <aside
@@ -174,11 +172,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-800 truncate" title={user?.fullName || user?.email}>
-                {user?.fullName || user?.email || 'User'}
+              <p className="text-xs font-semibold text-slate-800 truncate" title={user?.fullName || user?.username}>
+                {user?.fullName || `@${user?.username}`}
               </p>
-              <p className="text-[10px] text-slate-400 truncate" title={user?.email}>
-                {user?.email}
+              <p className="text-[10px] text-slate-400 truncate" title={user?.username ? `@${user.username}` : ''}>
+                {user?.username ? `@${user.username}` : ''}
               </p>
             </div>
           </div>

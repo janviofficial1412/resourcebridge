@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Layers,
@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   Activity,
   ArrowRight,
-  Info,
   X,
   ExternalLink,
   Lock,
@@ -18,18 +17,35 @@ import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
 import { SummaryCard } from '../components/ui/SummaryCard';
 import { EmptyState } from '../components/ui/EmptyState';
+import { institutionService } from '../features/institutions/institutionService';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [showShareModal, setShowShareModal] = useState(false);
+  const [institutionCount, setInstitutionCount] = useState<number | null>(null);
 
-  // Derives honest display name from real authentication payload
-  const displayName = user?.fullName || user?.email || 'Scholar';
+  useEffect(() => {
+    let isMounted = true;
+    institutionService.listMyInstitutions()
+      .then((insts) => {
+        if (isMounted) {
+          setInstitutionCount(insts.length);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setInstitutionCount(null);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* ------------------------------------------------------------------
-          A. WELCOME SECTION
+          A. WELCOME SECTION (USERNAME GREETING, NO EMAIL FALLBACK)
       ------------------------------------------------------------------- */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -40,7 +56,13 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-              Welcome back, <span className="text-brand-600">{displayName}</span>
+              {user?.username ? (
+                <>
+                  Welcome back, <span className="text-brand-600">{user.fullName}</span>!
+                </>
+              ) : (
+                <>Welcome back!</>
+              )}
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
@@ -77,7 +99,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------------
-          B. SUMMARY CARDS (HONEST REPORTING — NO FAKE NUMBERS)
+          B. SUMMARY CARDS (HONEST REPORTING WITH LIVE INSTITUTIONS)
       ------------------------------------------------------------------- */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -85,8 +107,8 @@ export const DashboardPage: React.FC = () => {
             <h2 className="text-base font-bold text-slate-900 tracking-tight">Platform Metrics</h2>
             <p className="text-xs text-slate-500">Live indicators based on verified backend service responses</p>
           </div>
-          <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md">
-            Backend API Readiness: 40%
+          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+            Phase 4 Institutions Connected
           </span>
         </div>
 
@@ -113,12 +135,12 @@ export const DashboardPage: React.FC = () => {
 
           <SummaryCard
             title="Joined Institutions"
-            value="—"
-            status="pending"
-            badgeText="API Pending"
+            value={institutionCount !== null ? institutionCount : '—'}
+            status={institutionCount !== null ? 'active' : 'pending'}
+            badgeText={institutionCount !== null ? `${institutionCount} Active` : 'Checking API'}
             icon={<Building2 className="h-4 w-4 text-emerald-600" />}
-            description="Universities, departments, or research groups with active membership."
-            helpText="Awaiting GET /api/institutions in Phase 4"
+            description="Universities, departments, or research groups where you have active verified membership."
+            helpText="Connected to GET /api/institutions"
           />
 
           <SummaryCard
@@ -128,7 +150,7 @@ export const DashboardPage: React.FC = () => {
             badgeText="API Pending"
             icon={<ShieldCheck className="h-4 w-4 text-amber-600" />}
             description="Unverified membership requests awaiting departmental administrator review."
-            helpText="Awaiting GET /api/memberships in Phase 4"
+            helpText="Awaiting invitation flow"
           />
         </div>
       </div>
@@ -213,7 +235,7 @@ export const DashboardPage: React.FC = () => {
                   Explore Institutions
                 </h3>
                 <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  Browse partner universities, faculties, and authorized campus departments.
+                  Browse partner universities, faculties, and manage your department memberships.
                 </p>
               </div>
             </div>
@@ -307,7 +329,7 @@ export const DashboardPage: React.FC = () => {
               Authentication Mechanism
             </span>
             <p className="text-slate-500 leading-relaxed">
-              Stateful HTTP-only <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">JSESSIONID</code> managed by Spring Security. Zero JWTs used.
+              Username-based session authentication with HTTP-only <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">JSESSIONID</code> managed by Spring Security.
             </p>
           </div>
 
@@ -333,11 +355,11 @@ export const DashboardPage: React.FC = () => {
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
             <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5 text-amber-600" />
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
               Session Persistence
             </span>
             <p className="text-slate-500 leading-relaxed">
-              Absence of <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">GET /api/auth/me</code> means tab refreshes intentionally require re-authenticating.
+              <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">GET /api/auth/me</code> restores authenticated state on tab refresh securely.
             </p>
           </div>
         </div>

@@ -11,9 +11,11 @@ import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { InstitutionsPage } from './pages/InstitutionsPage';
+import { InstitutionDetailPage } from './pages/InstitutionDetailPage';
 import { MyResourcesPage } from './pages/MyResourcesPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { Loader } from './components/ui/Loader';
 
 // Renders AuthenticatedLayout if user is signed in, otherwise public AppLayout
 const AdaptiveAppLayout: React.FC = () => {
@@ -23,7 +25,10 @@ const AdaptiveAppLayout: React.FC = () => {
 
 // Redirects authenticated users away from login/register to dashboard
 const PublicOnlyRoute: React.FC<{ element: React.ReactElement }> = ({ element }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return <Loader fullScreen label="Checking session..." />;
+  }
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -52,6 +57,7 @@ export const App: React.FC = () => {
         <Route element={<ProtectedRoute />}>
           <Route element={<AuthenticatedLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="institutions/:id" element={<InstitutionDetailPage />} />
             <Route path="my-resources" element={<MyResourcesPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>

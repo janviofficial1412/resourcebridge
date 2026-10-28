@@ -48,6 +48,7 @@ export class ApiClientError extends Error {
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   skipCsrf?: boolean;
+  silent?: boolean;
 }
 
 const RAW_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
@@ -170,7 +171,7 @@ export async function apiRequest<T = unknown>(
 
   // Specialized messaging for standard HTTP codes if backend returned bare code
   if (response.status === 401 && (!responseData || errorMessage.includes('Request failed'))) {
-    errorMessage = 'Invalid email or password';
+    errorMessage = 'Authentication required or session expired';
   } else if (response.status === 403 && (!responseData || errorMessage.includes('Request failed'))) {
     errorMessage = 'Forbidden: CSRF token verification failed or session expired';
   }

@@ -1,6 +1,7 @@
 package com.resourcebridge.backend;
 
 import com.resourcebridge.backend.identity.RegistrationService;
+import com.resourcebridge.backend.institution.InstitutionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +24,29 @@ public class ApiExceptionHandler {
     public record FieldProblem(String field, String message) {
     }
 
+    @ExceptionHandler(RegistrationService.UsernameAlreadyTakenException.class)
+    public ResponseEntity<ApiError> handleUsernameAlreadyTaken() {
+        return build(HttpStatus.CONFLICT, "An account with this username already exists", List.of());
+    }
+
     @ExceptionHandler(RegistrationService.EmailAlreadyRegisteredException.class)
     public ResponseEntity<ApiError> handleEmailAlreadyRegistered() {
         return build(HttpStatus.CONFLICT, "An account with this email already exists", List.of());
+    }
+
+    @ExceptionHandler(InstitutionService.DuplicateInstitutionSlugException.class)
+    public ResponseEntity<ApiError> handleDuplicateInstitutionSlug() {
+        return build(HttpStatus.CONFLICT, "An institution with this slug already exists", List.of());
+    }
+
+    @ExceptionHandler(InstitutionService.InstitutionNotFoundException.class)
+    public ResponseEntity<ApiError> handleInstitutionNotFound(InstitutionService.InstitutionNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(InstitutionService.InstitutionAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleInstitutionAccessDenied(InstitutionService.InstitutionAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -21,15 +21,15 @@ public class AppUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        if (username == null) {
+        if (username == null || username.isBlank()) {
             throw new UsernameNotFoundException("User not found");
         }
-        String email = username.trim().toLowerCase(Locale.ROOT);
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
 
-        AppUser user = appUserRepository.findByEmail(email)
+        AppUser user = appUserRepository.findByUsername(normalized)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        return User.withUsername(user.getEmail())
+        return User.withUsername(user.getUsername())
                 .password(user.getPasswordHash())
                 .authorities(List.<GrantedAuthority>of())
                 .disabled(!user.isEnabled())

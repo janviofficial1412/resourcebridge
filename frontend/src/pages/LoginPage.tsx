@@ -1,83 +1,53 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, LogIn } from 'lucide-react';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { LogIn, User as UserIcon, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { ApiClientError } from '../services/api';
 
-interface LocationState {
-  from?: { pathname: string };
-  registeredEmail?: string;
-}
-
 export const LoginPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const state = (location.state as LocationState) || {};
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [email, setEmail] = useState(state.registeredEmail || '');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      newErrors.email = 'Email address is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-
-    if (!password) {
-      newErrors.password = 'Password is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setApiError(null);
+    setGeneralError(null);
 
-    if (!validateForm()) {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      setGeneralError('Please enter your username');
+      return;
+    }
+    if (!password) {
+      setGeneralError('Please enter your password');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      // On successful login, redirect to intended page or dashboard
-      const redirectTo = state.from?.pathname || '/dashboard';
-      navigate(redirectTo, { replace: true });
-    } catch (err) {
+      await login({ username: trimmedUsername, password });
+      navigate(from, { replace: true });
+    } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        if (err.isAuthError) {
-          setApiError('Invalid email or password. Please verify your credentials and try again.');
-        } else if (err.isCsrfError) {
-          setApiError(
-            'Security validation (CSRF) failed. Your session may have expired. Please refresh the page and try again.'
-          );
-        } else if (err.isNetworkError) {
-          setApiError(
-            'Could not connect to the authentication server. Please ensure the backend is running at http://localhost:8080.'
-          );
+        if (err.status === 401) {
+          setGeneralError('Invalid username or password. Please verify your credentials.');
+        } else if (err.status === 403) {
+          setGeneralError('Session security check failed (CSRF mismatch). Please reload the page.');
         } else {
-          setApiError(err.message || 'Authentication failed. Please try again.');
+          setGeneralError(err.message || 'An unexpected error occurred during login.');
         }
       } else {
-        setApiError('An unexpected error occurred. Please try again later.');
+        setGeneralError('Unable to connect to the authentication service. Please check your connection.');
       }
     } finally {
       setIsSubmitting(false);
@@ -85,94 +55,75 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 border border-brand-100 mb-2">
+    <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 mb-2">
             <LogIn className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            Welcome back
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Sign in to ResourceBridge</h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Sign in to access your campus resources and institutions
+            Access your university research resources and equipment
           </p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/90 shadow-sm space-y-5">
-          {state.registeredEmail && (
-            <ErrorMessage
-              variant="info"
-              message="Your account has been created. Please sign in with your credentials below."
-            />
-          )}
+        {generalError && (
+          <ErrorMessage
+            variant="error"
+            message={generalError}
+            onDismiss={() => setGeneralError(null)}
+          />
+        )}
 
-          {apiError && (
-            <ErrorMessage
-              variant="error"
-              message={apiError}
-              onDismiss={() => setApiError(null)}
-            />
-          )}
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <Input
+            id="login-username"
+            name="username"
+            type="text"
+            label="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="e.g. scholar_jane"
+            required
+            autoComplete="username"
+            leftIcon={<UserIcon className="h-4 w-4" />}
+          />
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <Input
-              label="Campus / Academic Email"
-              type="email"
-              placeholder="you@university.edu"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
-              }}
-              error={errors.email}
-              leftIcon={<Mail className="h-4 w-4" />}
-              required
-              disabled={isSubmitting}
-              autoComplete="email"
-            />
+          <Input
+            id="login-password"
+            name="password"
+            type="password"
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            autoComplete="current-password"
+            leftIcon={<Lock className="h-4 w-4" />}
+          />
 
-            <Input
-              label="Password"
-              type="password"
-              placeholder="Your password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
-              }}
-              error={errors.password}
-              leftIcon={<Lock className="h-4 w-4" />}
-              required
-              disabled={isSubmitting}
-              autoComplete="current-password"
-            />
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full justify-center"
+            size="md"
+            isLoading={isSubmitting}
+            rightIcon={<ArrowRight className="h-4 w-4" />}
+          >
+            Sign In
+          </Button>
+        </form>
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full mt-2"
-              isLoading={isSubmitting}
-              rightIcon={<ArrowRight className="h-4 w-4" />}
-            >
-              Sign In
-            </Button>
-          </form>
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>Don't have an account?</span>
+          <Link to="/register" className="font-semibold text-brand-600 hover:text-brand-700">
+            Create an account
+          </Link>
+        </div>
 
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-500">
-              Don&apos;t have an account yet?{' '}
-              <Link
-                to="/register"
-                className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
-              >
-                Create an account
-              </Link>
-            </p>
-          </div>
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center gap-2 text-[11px] text-slate-500">
+          <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span>Spring Security session authentication (`JSESSIONID`)</span>
         </div>
       </div>
     </div>

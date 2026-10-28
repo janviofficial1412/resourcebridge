@@ -3,31 +3,34 @@
  */
 
 export interface RegisterCredentials {
-  email: string;
+  username: string;
   password: string;
   fullName: string;
+  email?: string;
 }
 
 export interface LoginCredentials {
-  email: string;
+  username: string;
   password: string;
 }
 
 export interface UserResponse {
   id: string;
-  email: string;
+  username: string;
+  email?: string | null;
   fullName: string;
   createdAt: string;
 }
 
 export interface LoginResponse {
-  email: string;
+  username: string;
 }
 
 export interface AuthUser {
-  email: string;
-  fullName?: string;
   id?: string;
+  username: string;
+  email?: string | null;
+  fullName?: string;
 }
 
 export interface AuthState {

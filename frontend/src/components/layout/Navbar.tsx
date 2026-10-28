@@ -45,8 +45,8 @@ export const Navbar: React.FC = () => {
   const authenticatedLinks: NavLinkItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
     { label: 'Discover', path: '/discover', icon: <Compass className="h-3.5 w-3.5" /> },
-    { label: 'My Resources', path: '/my-resources', icon: <Briefcase className="h-3.5 w-3.5" /> },
     { label: 'Institutions', path: '/institutions', icon: <Building2 className="h-3.5 w-3.5" /> },
+    { label: 'My Resources', path: '/my-resources', icon: <Briefcase className="h-3.5 w-3.5" /> },
     { label: 'Profile', path: '/profile', icon: <UserCheck className="h-3.5 w-3.5" /> },
   ];
 
@@ -112,7 +112,7 @@ export const Navbar: React.FC = () => {
                 >
                   <UserIcon className="h-3.5 w-3.5 text-brand-600" />
                   <span className="max-w-[150px] truncate">
-                    {user?.fullName || user?.email}
+                    {user?.username ? `@${user.username}` : user?.fullName || 'User'}
                   </span>
                 </Link>
                 <Button
@@ -163,7 +163,7 @@ export const Navbar: React.FC = () => {
             <div className="p-3 mb-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
               <span className="text-slate-400 block font-normal">Signed in as</span>
               <span className="font-semibold text-slate-800 break-all">
-                {user.fullName ? `${user.fullName} (${user.email})` : user.email}
+                @{user.username} {user.fullName && `(${user.fullName})`}
               </span>
             </div>
           )}

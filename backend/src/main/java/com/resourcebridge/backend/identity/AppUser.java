@@ -19,7 +19,10 @@ public class AppUser {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "email", nullable = false, length = 254)
+    @Column(name = "username", nullable = false, length = 50)
+    private String username;
+
+    @Column(name = "email", nullable = true, length = 254)
     private String email;
 
     @Column(name = "password_hash", nullable = false, length = 100)
@@ -43,14 +46,23 @@ public class AppUser {
     protected AppUser() {
     }
 
-    public AppUser(String email, String passwordHash, String fullName) {
+    public AppUser(String username, String email, String passwordHash, String fullName) {
+        this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
         this.fullName = fullName;
     }
 
+    public AppUser(String username, String passwordHash, String fullName) {
+        this(username, null, passwordHash, fullName);
+    }
+
     public UUID getId() {
         return id;
+    }
+
+    public String getUsername() {
+        return username;
     }
 
     public String getEmail() {

@@ -31,7 +31,7 @@ export async function ensureCsrfToken(baseUrl: string = ''): Promise<string> {
 
   // Probe request to trigger CsrfCookieFilter on the backend
   try {
-    const probeUrl = `${baseUrl}/api/auth/login`;
+    const probeUrl = `${baseUrl}/api/auth/csrf`;
     await fetch(probeUrl, {
       method: 'GET',
       credentials: 'include',

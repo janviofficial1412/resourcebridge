@@ -308,15 +308,110 @@ To facilitate future backend implementation without breaking frontend code, the 
   * `/discover` and `/institutions` adaptively render within `AuthenticatedLayout` when signed in, or `AppLayout` when browsing as a guest.
   * Protected routes (`/dashboard`, `/my-resources`, `/profile`) strictly require active authentication.
 
-### 9.3. Backend Integration & Unimplemented Endpoints
-* **Existing Backend APIs Used:**
-  * `POST /api/auth/logout`: Stateful session invalidation on Tomcat server with CSRF token verification.
-  * Session credentials: `JSESSIONID` and `X-XSRF-TOKEN` handled via `src/services/api.ts`.
-* **Endpoints Awaiting Backend Implementation:**
-  1. `GET /api/auth/me`: Currently missing. Would allow restoring full user profile and surviving page refreshes without storing credentials in browser storage.
-  2. `GET /api/institutions` & `POST /api/institutions`: Phase 4 Institution Management.
-  3. `GET /api/memberships`: Phase 4 Membership Approvals.
-  4. `GET /api/resources` & `POST /api/resources`: Phase 5 Resource Management & Phase 6 Catalog.
-  5. `GET /api/activity` or `GET /api/audit-logs/my`: Authenticated user activity feed.
+---
+
+## 10. Phase 4: Institution Management & Username-Based Authentication Summary
+
+### 10.1. Username-Based Identity & Authentication
+* **Primary Identifier:** Users now register and log in using a unique, normalized **username** (`3-50` characters, matching `^[a-zA-Z0-9_.-]+$`).
+* **Database Migration (`V2__username_and_institution.sql`):**
+  * Added `username varchar(50) NOT NULL` to `app_user` with `uq_app_user_username`, `ck_app_user_username_lower`, and `ck_app_user_username_format`.
+  * Safe backfill for existing rows: populated from email prefix (`lower(regexp_replace(split_part(email, '@', 1), ...))`) before enforcing NOT NULL.
+* **Email Decision & Rationale:**
+  * Username is the sole required login identifier.
+  * Email is retained as an **optional** registration field for future notifications and account recovery.
+  * In `V2`, `app_user.email` was altered to nullable (`DROP NOT NULL`), and check constraints updated to `(email IS NULL OR position('@' IN email) > 1)`.
+* **API Contracts:**
+  * **Registration (`POST /api/auth/register`):**
+    ```json
+    {
+      "username": "scholar_jane",
+      "password": "Password123",
+      "fullName": "Dr. Jane Doe",
+      "email": "jane@university.edu"
+    }
+    ```
+    *Response (201 Created):*
+    ```json
+    {
+      "id": "e7b0c95a-2e4b-4b1e-bfa1-5a6361a92440",
+      "username": "scholar_jane",
+      "email": "jane@university.edu",
+      "fullName": "Dr. Jane Doe",
+      "createdAt": "2026-10-28T12:00:00Z"
+    }
+    ```
+  * **Login (`POST /api/auth/login`):**
+    ```json
+    {
+      "username": "scholar_jane",
+      "password": "Password123"
+    }
+    ```
+    *Response (200 OK):*
+    ```json
+    {
+      "username": "scholar_jane"
+    }
+    ```
+  * **Current User (`GET /api/auth/me`):**
+    * Protected by Spring Security; reads active `SecurityContext`.
+    * Returns full `UserResponse` (`id`, `username`, `email`, `fullName`, `createdAt`).
+    * Solves the browser tab refresh limitation: `AuthContext` queries `/api/auth/me` on startup to rehydrate authentication state seamlessly.
+
+### 10.2. Dashboard Greeting & UI Updates
+* **Greeting Requirement:**
+  * Greeting explicitly displays: **"Welcome back, [username]!"**
+  * If username is temporarily unavailable, it cleanly renders **"Welcome back!"**.
+  * Email address is strictly never used as a greeting fallback.
+* **Navbar & Sidebar:**
+  * Display `@username` and user initials derived from `username`.
+  * Institutions navigation link promoted from roadmap badge to live active section.
+* **Dashboard Summary Cards:**
+  * "Joined Institutions" summary card now actively fetches and displays the user's real institution count from `GET /api/institutions`.
+
+### 10.3. Institution Management (Backend & Frontend)
+* **Creation (`POST /api/institutions`):**
+  * Input: `{ "name": "...", "slug": "...", "timezone": "..." }`
+  * Validates lowercase hyphenated slug (`^[a-z0-9]+(-[a-z0-9]+)*$`).
+  * **Atomicity:** Creation of `Institution` and initial `Membership` with role `INSTITUTION_ADMIN` and status `ACTIVE` (`verifiedAt = now()`) runs in a single `@Transactional` method.
+* **Listing (`GET /api/institutions`):**
+  * Lists all institutions where the authenticated user holds an active membership.
+* **Details (`GET /api/institutions/{id}`):**
+  * Enforces institution boundaries: throws 403 Forbidden if the requesting user does not hold an active membership in the requested institution.
+  * Returns metadata, member count, and user's role.
+* **Members Roster (`GET /api/institutions/{id}/members`):**
+  * Returns list of enrolled members with usernames, full names, roles, statuses, and verification dates.
+* **Frontend Screens:**
+  * `InstitutionsPage.tsx`: Interactive directory with institution cards, status badges, and a "Create Institution" modal dialog.
+  * `InstitutionDetailPage.tsx`: Detailed institution management view at `/institutions/:id` with member roster table.
+
+---
+
+## 11. Authentication Lifecycle & 401 Startup Probe
+
+### 11.1. Why `GET /api/auth/me` Returns 401 on App Startup
+* **Root Cause:** When an unauthenticated visitor accesses the frontend (`http://localhost:5173`), `AuthProvider` initiates `restoreSession()` -> `GET /api/auth/me` to determine if a valid user session exists.
+* Because the visitor has not yet logged in, the browser has no `JSESSIONID` cookie to attach. Spring Security's `AuthorizationFilter` intercepts the request against `.anyRequest().authenticated()` and triggers `HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)`, returning HTTP 401 Unauthorized.
+* **Expected State:** An HTTP 401 response on the startup auth check is normal and structurally expected for anonymous visitors. It confirms to the frontend that no active session exists, allowing public routes (`/`, `/login`, `/register`, `/discover`) to render normally.
+* **Double Request in Dev Console:** In React 18, `<React.StrictMode>` (in `main.tsx`) intentionally mounts, unmounts, and re-mounts component trees in development to detect effect side effects. This causes `AuthContext`'s mount effect to execute twice in dev mode.
+* **Native DevTools Red Log:** Chromium and Firefox DevTools engines automatically print a red network line whenever any fetch request receives a 4xx/5xx status code (`api.ts:116 GET http://localhost:8080/api/auth/me 401 (Unauthorized)`). This is an unavoidable browser developer tools feature, not a JavaScript exception.
+
+### 11.2. Session Persistence Lifecycle
+* **Login (`POST /api/auth/login`):**
+  * Upon valid credentials, `AuthController` creates a `SecurityContext` and saves it via `securityContextRepository.saveContext(...)`.
+  * Tomcat creates an `HttpSession` and sets the `JSESSIONID` cookie (`HttpOnly=true`, `SameSite=Lax`).
+* **Session Restoration on Refresh:**
+  * Every API call uses `credentials: 'include'`.
+  * When an authenticated user refreshes the page, the browser attaches the `JSESSIONID` cookie to `GET /api/auth/me`.
+  * The backend verifies the session, returning HTTP 200 with the `UserResponse` DTO.
+  * `AuthContext` populates user state (`id`, `username`, `email`, `fullName`) and sets `isAuthenticated = true`, seamlessly persisting the session without credentials in `localStorage`.
+
+### 11.3. CSRF & CORS Alignment
+* **CORS Allowed Headers:** `SecurityConfig` allows `*` headers with `allowCredentials(true)` for `http://localhost:5173`, ensuring preflight and content negotiation headers (`Accept`, `Content-Type`, `X-XSRF-TOKEN`) pass without obstruction.
+* **Cookie SameSite Configuration:** Configured `server.servlet.session.cookie.same-site=lax` in `application.properties` to guarantee cross-port cookie preservation on modern browsers.
+* **CSRF Token Endpoint:** Added `GET /api/auth/csrf` (permitted and exempt from CSRF) to allow headless CSRF cookie hydration if required prior to mutating requests.
+
+
 
 

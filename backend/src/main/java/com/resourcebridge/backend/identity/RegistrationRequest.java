@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.Payload;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.lang.annotation.Documented;
@@ -18,6 +19,10 @@ import java.nio.charset.StandardCharsets;
 public record RegistrationRequest(
 
         @NotBlank
+        @Size(min = 3, max = 50, message = "must be between 3 and 50 characters")
+        @Pattern(regexp = "^[a-zA-Z0-9_.-]+$", message = "must contain only alphanumeric characters, underscores, hyphens, and periods")
+        String username,
+
         @Email
         @Size(max = 254, message = "must be at most 254 characters")
         String email,
@@ -35,7 +40,7 @@ public record RegistrationRequest(
     /** Keeps the password out of logs: the auto-generated record toString() would print it. */
     @Override
     public String toString() {
-        return "RegistrationRequest[email=" + email + ", password=<redacted>, fullName=" + fullName + "]";
+        return "RegistrationRequest[username=" + username + ", email=" + email + ", password=<redacted>, fullName=" + fullName + "]";
     }
 
     /** Custom constraint: the value, encoded as UTF-8, must be at most {@code value()} bytes. */

@@ -133,7 +133,7 @@ export const AuthenticatedLayout: React.FC = () => {
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <UserIcon className="h-3.5 w-3.5 text-brand-600 hidden sm:inline" />
               <span className="max-w-[140px] truncate font-medium text-xs">
-                {user?.email}
+                {user?.username ? `@${user.username}` : 'User'}
               </span>
             </div>
           </div>

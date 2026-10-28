@@ -1,111 +1,123 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { UserPlus, User as UserIcon, Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { ApiClientError } from '../services/api';
 
 export const RegisterPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { register } = useAuth();
-
+  const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
-  // Validate form client-side matching backend rules
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
-    // Full name validation
-    if (!fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    } else if (fullName.length > 200) {
-      newErrors.fullName = 'Full name must be at most 200 characters';
+  const getUtf8ByteLength = (str: string): number => {
+    return new TextEncoder().encode(str).length;
+  };
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      errors.username = 'Username is required';
+    } else if (trimmedUsername.length < 3) {
+      errors.username = 'Username must be at least 3 characters';
+    } else if (trimmedUsername.length > 50) {
+      errors.username = 'Username must be at most 50 characters';
+    } else if (!/^[a-zA-Z0-9_.-]+$/.test(trimmedUsername)) {
+      errors.username = 'Username may only contain letters, numbers, underscores, hyphens, and periods';
     }
 
-    // Email validation
-    const emailTrimmed = email.trim();
-    if (!emailTrimmed) {
-      newErrors.email = 'Email address is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
-      newErrors.email = 'Please enter a valid email address';
-    } else if (emailTrimmed.length > 254) {
-      newErrors.email = 'Email must be at most 254 characters';
+    const trimmedFullName = fullName.trim();
+    if (!trimmedFullName) {
+      errors.fullName = 'Full name is required';
+    } else if (trimmedFullName.length > 200) {
+      errors.fullName = 'Full name must be at most 200 characters';
     }
 
-    // Password validation: min 8 chars, max 72 UTF-8 bytes
-    const utf8Bytes = new TextEncoder().encode(password).length;
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      errors.email = 'Please enter a valid email address';
+    } else if (trimmedEmail.length > 254) {
+      errors.email = 'Email must be at most 254 characters';
+    }
+
     if (!password) {
-      newErrors.password = 'Password is required';
+      errors.password = 'Password is required';
     } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (utf8Bytes > 72) {
-      newErrors.password = 'Password exceeds maximum length (72 bytes in UTF-8)';
+      errors.password = 'Password must be at least 8 characters';
+    } else if (getUtf8ByteLength(password) > 72) {
+      errors.password = 'Password must not exceed 72 bytes';
     }
 
-    // Confirm password validation
-    if (!confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+    if (password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setApiError(null);
-    setSuccessMessage(null);
+    setGeneralError(null);
 
-    if (!validateForm()) {
+    if (!validate()) {
       return;
     }
 
     setIsSubmitting(true);
     try {
       await register({
+        username: username.trim().toLowerCase(),
         fullName: fullName.trim(),
-        email: email.trim().toLowerCase(),
+        email: email.trim() || undefined,
         password,
       });
 
-      setSuccessMessage(
-        'Account created successfully! Redirecting you to sign in...'
-      );
-
-      // Give the user a moment to see the success confirmation, then navigate
+      setRegistrationSuccess(true);
       setTimeout(() => {
-        navigate('/login', {
-          state: { registeredEmail: email.trim().toLowerCase() },
-        });
+        navigate('/login', { state: { prefilledUsername: username.trim().toLowerCase() } });
       }, 1500);
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        if (err.isConflict) {
-          setApiError('An account with this email address already exists. Please sign in instead.');
-        } else if (err.isValidationError && err.fieldErrors.length > 0) {
-          const backendFieldErrors: Record<string, string> = {};
+        if (err.status === 409) {
+          if (err.message.toLowerCase().includes('username')) {
+            setFieldErrors((prev) => ({
+              ...prev,
+              username: 'This username is already taken. Please choose another.',
+            }));
+          } else if (err.message.toLowerCase().includes('email')) {
+            setFieldErrors((prev) => ({
+              ...prev,
+              email: 'An account with this email already exists.',
+            }));
+          } else {
+            setGeneralError(err.message);
+          }
+        } else if (err.status === 400 && err.fieldErrors) {
+          const apiFieldMap: Record<string, string> = {};
           err.fieldErrors.forEach((fe) => {
-            backendFieldErrors[fe.field] = fe.message;
+            apiFieldMap[fe.field] = fe.message;
           });
-          setErrors(backendFieldErrors);
-          setApiError('Please correct the highlighted errors below.');
+          setFieldErrors(apiFieldMap);
         } else {
-          setApiError(err.message);
+          setGeneralError(err.message || 'Registration failed. Please try again.');
         }
       } else {
-        setApiError('An unexpected error occurred during registration. Please try again.');
+        setGeneralError('Network error. Unable to contact registration service.');
       }
     } finally {
       setIsSubmitting(false);
@@ -113,133 +125,152 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 border border-brand-100 mb-2">
-            <ShieldCheck className="h-6 w-6" />
+    <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 mb-2">
+            <UserPlus className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            Create your account
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Create an Account</h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Join ResourceBridge to discover and share institutional equipment
+            Join ResourceBridge to share and discover university facilities
           </p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/90 shadow-sm space-y-5">
-          {apiError && (
-            <ErrorMessage
-              message={apiError}
-              variant="error"
-              onDismiss={() => setApiError(null)}
-            />
-          )}
-
-          {successMessage && (
-            <ErrorMessage
-              message={successMessage}
-              variant="success"
-            />
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <Input
-              label="Full Name"
-              type="text"
-              placeholder="e.g. Jane Doe"
-              value={fullName}
-              onChange={(e) => {
-                setFullName(e.target.value);
-                if (errors.fullName) setErrors((prev) => ({ ...prev, fullName: '' }));
-              }}
-              error={errors.fullName}
-              leftIcon={<User className="h-4 w-4" />}
-              required
-              disabled={isSubmitting || Boolean(successMessage)}
-              maxLength={200}
-            />
-
-            <Input
-              label="Campus / Academic Email"
-              type="email"
-              placeholder="you@university.edu"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: '' }));
-              }}
-              error={errors.email}
-              leftIcon={<Mail className="h-4 w-4" />}
-              required
-              disabled={isSubmitting || Boolean(successMessage)}
-              helperText="Institutional email ensures scoped access to your campus."
-              maxLength={254}
-            />
-
-            <Input
-              label="Password"
-              type="password"
-              placeholder="At least 8 characters"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
-              }}
-              error={errors.password}
-              leftIcon={<Lock className="h-4 w-4" />}
-              required
-              disabled={isSubmitting || Boolean(successMessage)}
-              helperText="Min. 8 characters (max 72 bytes UTF-8)."
-            />
-
-            <Input
-              label="Confirm Password"
-              type="password"
-              placeholder="Re-enter your password"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value);
-                if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: '' }));
-              }}
-              error={errors.confirmPassword}
-              leftIcon={<Lock className="h-4 w-4" />}
-              required
-              disabled={isSubmitting || Boolean(successMessage)}
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full mt-2"
-              isLoading={isSubmitting}
-              disabled={isSubmitting || Boolean(successMessage)}
-              rightIcon={<ArrowRight className="h-4 w-4" />}
-            >
-              Create Account
-            </Button>
-          </form>
-
-          <div className="pt-4 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-500">
-              Already have an account?{' '}
-              <Link
-                to="/login"
-                className="font-medium text-brand-600 hover:text-brand-700 hover:underline"
-              >
-                Sign in here
-              </Link>
-            </p>
+        {registrationSuccess && (
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2.5 text-xs sm:text-sm">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <div>
+              <p className="font-semibold">Account created successfully!</p>
+              <p className="text-emerald-700 text-xs">Redirecting to login...</p>
+            </div>
           </div>
+        )}
+
+        {generalError && (
+          <ErrorMessage
+            variant="error"
+            message={generalError}
+            onDismiss={() => setGeneralError(null)}
+          />
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <Input
+            id="reg-username"
+            name="username"
+            type="text"
+            label="Username"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              if (fieldErrors.username) {
+                setFieldErrors((prev) => ({ ...prev, username: '' }));
+              }
+            }}
+            placeholder="e.g. scholar_jane"
+            required
+            error={fieldErrors.username}
+            helperText="3-50 characters. Letters, numbers, hyphens, and periods."
+            leftIcon={<UserIcon className="h-4 w-4" />}
+          />
+
+          <Input
+            id="reg-fullname"
+            name="fullName"
+            type="text"
+            label="Full Name"
+            value={fullName}
+            onChange={(e) => {
+              setFullName(e.target.value);
+              if (fieldErrors.fullName) {
+                setFieldErrors((prev) => ({ ...prev, fullName: '' }));
+              }
+            }}
+            placeholder="e.g. Dr. Jane Doe"
+            required
+            error={fieldErrors.fullName}
+            leftIcon={<UserIcon className="h-4 w-4" />}
+          />
+
+          <Input
+            id="reg-email"
+            name="email"
+            type="email"
+            label="Email Address (Optional)"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (fieldErrors.email) {
+                setFieldErrors((prev) => ({ ...prev, email: '' }));
+              }
+            }}
+            placeholder="e.g. jane@university.edu"
+            error={fieldErrors.email}
+            helperText="Optional for account recovery and notifications."
+            leftIcon={<Mail className="h-4 w-4" />}
+          />
+
+          <Input
+            id="reg-password"
+            name="password"
+            type="password"
+            label="Password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (fieldErrors.password) {
+                setFieldErrors((prev) => ({ ...prev, password: '' }));
+              }
+            }}
+            placeholder="••••••••"
+            required
+            error={fieldErrors.password}
+            helperText="Minimum 8 characters (max 72 UTF-8 bytes for BCrypt)."
+            leftIcon={<Lock className="h-4 w-4" />}
+          />
+
+          <Input
+            id="reg-confirm-password"
+            name="confirmPassword"
+            type="password"
+            label="Confirm Password"
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              if (fieldErrors.confirmPassword) {
+                setFieldErrors((prev) => ({ ...prev, confirmPassword: '' }));
+              }
+            }}
+            placeholder="••••••••"
+            required
+            error={fieldErrors.confirmPassword}
+            leftIcon={<Lock className="h-4 w-4" />}
+          />
+
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full justify-center"
+            size="md"
+            isLoading={isSubmitting}
+            disabled={registrationSuccess}
+            rightIcon={<ArrowRight className="h-4 w-4" />}
+          >
+            Create Account
+          </Button>
+        </form>
+
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>Already have an account?</span>
+          <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
+            Sign In
+          </Link>
         </div>
 
-        {/* Security assurance */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 text-center">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-          <span>Passwords hashed with BCrypt. Credentials never stored in browser storage.</span>
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center gap-2 text-[11px] text-slate-500">
+          <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span>CSRF-exempt registration endpoint, BCrypt password hashing</span>
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ import java.util.Locale;
 @Service
 public class RegistrationService {
 
-    /** Name of the unique constraint on app_user.email, exactly as defined in V1__initial_schema.sql. */
+    static final String USERNAME_UNIQUE_CONSTRAINT = "uq_app_user_username";
     static final String EMAIL_UNIQUE_CONSTRAINT = "uq_app_user_email";
 
     private final AppUserRepository appUserRepository;
@@ -29,51 +29,72 @@ public class RegistrationService {
 
     @Transactional
     public UserResponse register(RegistrationRequest request) {
-        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String username = request.username().trim().toLowerCase(Locale.ROOT);
+        String email = request.email() != null && !request.email().isBlank()
+                ? request.email().trim().toLowerCase(Locale.ROOT)
+                : null;
 
-        // Friendly early answer. Not a guarantee: two simultaneous requests can both pass this check.
-        if (appUserRepository.existsByEmail(email)) {
+        // Friendly early validation checks
+        if (appUserRepository.existsByUsername(username)) {
+            throw new UsernameAlreadyTakenException();
+        }
+
+        if (email != null && appUserRepository.existsByEmail(email)) {
             throw new EmailAlreadyRegisteredException();
         }
 
         String passwordHash = passwordEncoder.encode(request.password());
-        AppUser user = new AppUser(email, passwordHash, request.fullName());
+        AppUser user = new AppUser(username, email, passwordHash, request.fullName().trim());
 
         AppUser saved;
         try {
-            // Flush now so the INSERT (and any constraint violation) happens inside this try block.
             saved = appUserRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
-            if (isEmailUniqueViolation(e)) {
+            if (isConstraintViolation(e, USERNAME_UNIQUE_CONSTRAINT)) {
+                throw new UsernameAlreadyTakenException(e);
+            }
+            if (isConstraintViolation(e, EMAIL_UNIQUE_CONSTRAINT)) {
                 throw new EmailAlreadyRegisteredException(e);
             }
-            throw e; // some other integrity problem: do not mislabel it as a duplicate email
+            throw e;
         }
 
-        // Re-read the row so created_at holds the value the database actually generated.
         entityManager.refresh(saved);
 
-        return new UserResponse(saved.getId(), saved.getEmail(), saved.getFullName(), saved.getCreatedAt());
+        return new UserResponse(
+                saved.getId(),
+                saved.getUsername(),
+                saved.getEmail(),
+                saved.getFullName(),
+                saved.getCreatedAt()
+        );
     }
 
-    /** True only if this failure was caused by the unique constraint on app_user.email. */
-    private static boolean isEmailUniqueViolation(Throwable failure) {
+    private static boolean isConstraintViolation(Throwable failure, String constraintName) {
         for (Throwable t = failure; t != null; t = t.getCause()) {
             if (t instanceof ConstraintViolationException cve
-                    && EMAIL_UNIQUE_CONSTRAINT.equalsIgnoreCase(cve.getConstraintName())) {
+                    && constraintName.equalsIgnoreCase(cve.getConstraintName())) {
                 return true;
             }
             String message = t.getMessage();
-            if (message != null && message.contains(EMAIL_UNIQUE_CONSTRAINT)) {
+            if (message != null && message.contains(constraintName)) {
                 return true;
             }
         }
         return false;
     }
 
-    /** Thrown when the email is already registered. Carries no email address, to keep personal data out of logs. */
-    public static class EmailAlreadyRegisteredException extends RuntimeException {
+    public static class UsernameAlreadyTakenException extends RuntimeException {
+        public UsernameAlreadyTakenException() {
+            super("An account with this username already exists");
+        }
 
+        public UsernameAlreadyTakenException(Throwable cause) {
+            super("An account with this username already exists", cause);
+        }
+    }
+
+    public static class EmailAlreadyRegisteredException extends RuntimeException {
         public EmailAlreadyRegisteredException() {
             super("An account with this email already exists");
         }

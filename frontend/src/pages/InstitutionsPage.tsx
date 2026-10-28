@@ -1,56 +1,364 @@
-import React from 'react';
-import { Building2, ArrowLeft, Shield } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState } from '../components/ui/EmptyState';
+import {
+  Building2,
+  Plus,
+  ArrowRight,
+  ShieldCheck,
+  Globe,
+  Clock,
+  X,
+  RefreshCw,
+} from 'lucide-react';
+import { institutionService } from '../features/institutions/institutionService';
+import { InstitutionSummary } from '../features/institutions/institutionTypes';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { EmptyState } from '../components/ui/EmptyState';
+import { ErrorState } from '../components/ui/ErrorState';
+import { Loader } from '../components/ui/Loader';
+import { ApiClientError } from '../services/api';
 
 export const InstitutionsPage: React.FC = () => {
+  const [institutions, setInstitutions] = useState<InstitutionSummary[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Modal form states
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchInstitutions = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await institutionService.listMyInstitutions();
+      setInstitutions(data);
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) {
+        setError(err.message || 'Failed to load institutions');
+      } else {
+        setError('Network error: Unable to connect to institution service');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInstitutions();
+  }, [fetchInstitutions]);
+
+  // Auto-generate slug from name
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!slug || slug === generateSlug(name)) {
+      setSlug(generateSlug(val));
+    }
+    if (formErrors.name) {
+      setFormErrors((prev) => ({ ...prev, name: '' }));
+    }
+  };
+
+  const generateSlug = (str: string) => {
+    return str
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!name.trim()) {
+      errors.name = 'Institution name is required';
+    } else if (name.trim().length > 200) {
+      errors.name = 'Name must be at most 200 characters';
+    }
+
+    const trimmedSlug = slug.trim().toLowerCase();
+    if (!trimmedSlug) {
+      errors.slug = 'Slug is required';
+    } else if (trimmedSlug.length > 64) {
+      errors.slug = 'Slug must be at most 64 characters';
+    } else if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(trimmedSlug)) {
+      errors.slug = 'Slug must be lowercase alphanumeric with hyphens (e.g. mit-media-lab)';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    try {
+      await institutionService.createInstitution({
+        name: name.trim(),
+        slug: slug.trim().toLowerCase(),
+        timezone: timezone.trim() || 'UTC',
+      });
+
+      setShowCreateModal(false);
+      setName('');
+      setSlug('');
+      setTimezone('UTC');
+      setFormErrors({});
+      await fetchInstitutions();
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) {
+        if (err.status === 409) {
+          setFormErrors((prev) => ({
+            ...prev,
+            slug: 'An institution with this slug already exists. Please choose another.',
+          }));
+        } else if (err.status === 400 && err.fieldErrors) {
+          const apiMap: Record<string, string> = {};
+          err.fieldErrors.forEach((fe) => {
+            apiMap[fe.field] = fe.message;
+          });
+          setFormErrors(apiMap);
+        } else {
+          setFormErrors((prev) => ({
+            ...prev,
+            general: err.message || 'Failed to create institution',
+          }));
+        }
+      } else {
+        setFormErrors((prev) => ({
+          ...prev,
+          general: 'Network error. Please try again.',
+        }));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 mb-2">
-            <span>Phase 4 Roadmap</span>
-            <span>•</span>
-            <span>Institution Management Pending</span>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>Institution Management Active</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Building2 className="h-7 w-7 text-indigo-600" />
-            Partner Institutions & Memberships
+            Partner Institutions
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
             Universities, research consortia, and laboratories participating in the ResourceBridge verified network.
           </p>
         </div>
 
-        <Link to="/dashboard">
-          <Button variant="secondary" size="sm" leftIcon={<ArrowLeft className="h-4 w-4" />}>
-            Back to Dashboard
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={fetchInstitutions}
+            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+          >
+            Refresh
           </Button>
-        </Link>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowCreateModal(true)}
+            leftIcon={<Plus className="h-4 w-4" />}
+          >
+            Create Institution
+          </Button>
+        </div>
       </div>
 
-      {/* Schema / Architecture Transparency Card */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
-        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-          <Shield className="h-4 w-4 text-brand-600" />
-          Backend Model Status
-        </h3>
-        <p className="text-xs text-slate-600 leading-relaxed">
-          The database schema contains <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">institution</code> and <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">membership</code> tables enforcing strict tenant isolation. In Phase 4, the Spring Boot controllers for institution onboarding (<code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">POST /api/institutions</code>) and verified membership approvals will be integrated.
-        </p>
-      </div>
+      {/* Main Content Area */}
+      {isLoading ? (
+        <div className="py-16 flex justify-center">
+          <Loader size="lg" label="Loading institutions..." />
+        </div>
+      ) : error ? (
+        <ErrorState
+          title="Could not load institutions"
+          message={error}
+          onRetry={fetchInstitutions}
+        />
+      ) : institutions.length === 0 ? (
+        <EmptyState
+          icon={<Building2 className="h-7 w-7 text-indigo-600" />}
+          title="No Institutions Found"
+          badgeText="Active Membership Required"
+          description="You are not currently an active member of any institution. Create a new institution to become its administrator, or join an existing campus directory."
+          actionLabel="Create Your First Institution"
+          onAction={() => setShowCreateModal(true)}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {institutions.map((inst) => (
+            <div
+              key={inst.id}
+              className="bg-white border border-slate-200/90 rounded-xl p-6 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between"
+            >
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {inst.role}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {inst.status}
+                    </span>
+                  </div>
+                </div>
 
-      {/* Empty / Honest State */}
-      <EmptyState
-        icon={<Building2 className="h-6 w-6 text-indigo-600" />}
-        title="Institution Directory Connecting in Phase 4"
-        badgeText="Phase 4 Planned Integration"
-        description="No active institutions are currently linked to your session. Once the institution and membership endpoints are released in Phase 4, you can join campus directories, verify student credentials, and manage department affiliations."
-        actionLabel="Return to Dashboard"
-        actionHref="/dashboard"
-      />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base tracking-tight mb-1">
+                    {inst.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    slug: {inst.slug}
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Timezone: {inst.timezone}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Created: {new Date(inst.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 mt-5">
+                <Link to={`/institutions/${inst.id}`}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full justify-center text-xs"
+                    rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                  >
+                    Manage & View Members
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Institution Modal Dialog */}
+      {showCreateModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-institution-title"
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-xl border border-slate-200 space-y-5">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-brand-50 text-brand-700 text-[11px] font-semibold border border-brand-200">
+                  Initial Admin Assignment
+                </div>
+                <h2 id="create-institution-title" className="text-xl font-bold text-slate-900">
+                  Register New Institution
+                </h2>
+                <p className="text-xs text-slate-500">
+                  You will automatically become the initial administrator of this institution.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+                aria-label="Close dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {formErrors.general && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                {formErrors.general}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateSubmit} className="space-y-4" noValidate>
+              <Input
+                id="inst-name"
+                name="name"
+                type="text"
+                label="Institution Name"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="e.g. Oakridge University Makerspace"
+                required
+                error={formErrors.name}
+                helperText="Official university, laboratory, or faculty name."
+              />
+
+              <Input
+                id="inst-slug"
+                name="slug"
+                type="text"
+                label="Institution URL Slug"
+                value={slug}
+                onChange={(e) => {
+                  setSlug(e.target.value);
+                  if (formErrors.slug) setFormErrors((prev) => ({ ...prev, slug: '' }));
+                }}
+                placeholder="e.g. oakridge-univ-makerspace"
+                required
+                error={formErrors.slug}
+                helperText="Unique lowercase identifier with hyphens (e.g. mit-media-lab)."
+              />
+
+              <Input
+                id="inst-timezone"
+                name="timezone"
+                type="text"
+                label="Primary Timezone"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                placeholder="UTC or America/New_York"
+                helperText="Standard IANA timezone identifier (defaults to UTC)."
+              />
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  isLoading={isSubmitting}
+                >
+                  Create & Initialize
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

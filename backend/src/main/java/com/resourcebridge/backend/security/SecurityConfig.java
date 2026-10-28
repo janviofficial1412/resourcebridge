@@ -34,6 +34,7 @@ public class SecurityConfig {
 
     static final String REGISTER_PATH = "/api/auth/register";
     static final String LOGIN_PATH = "/api/auth/login";
+    static final String CSRF_PATH = "/api/auth/csrf";
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -42,21 +43,23 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, REGISTER_PATH);
         PathPatternRequestMatcher loginEndpoint =
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_PATH);
+        PathPatternRequestMatcher csrfEndpoint =
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, CSRF_PATH);
 
         http
                 // CSRF stays enabled. The token travels in a cookie the SPA can read and is echoed back in a header.
-                // Only registration is exempt; login is NOT exempt.
+                // Registration and GET CSRF probe are exempt. Login is NOT exempt.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers(registerEndpoint, loginEndpoint))
+                        .ignoringRequestMatchers(registerEndpoint, loginEndpoint, csrfEndpoint))
                 // Makes sure the XSRF-TOKEN cookie is actually written (see CsrfCookieFilter below).
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 // Server-side session (JSESSIONID cookie). No JWT.
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(registerEndpoint, loginEndpoint).permitAll()
+                        .requestMatchers(registerEndpoint, loginEndpoint, csrfEndpoint).permitAll()
                         .anyRequest().authenticated())
                 // Unauthenticated requests get a bare 401, never a redirect to a login page.
                 .exceptionHandling(ex -> ex
@@ -89,7 +92,7 @@ public class SecurityConfig {
                 List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
         );
         configuration.setAllowedHeaders(
-                List.of("Content-Type", "X-XSRF-TOKEN")
+                List.of("*")
         );
         configuration.setAllowCredentials(true);
 

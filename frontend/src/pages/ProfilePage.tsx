@@ -8,7 +8,9 @@ import {
   Key, 
   LogOut, 
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Mail,
+  User as UserIcon,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
@@ -30,7 +32,7 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const userInitial = (user?.fullName || user?.email || 'U').charAt(0).toUpperCase();
+  const userInitial = (user?.username || user?.fullName || 'U').charAt(0).toUpperCase();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -42,7 +44,7 @@ export const ProfilePage: React.FC = () => {
             User Profile & Session Security
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Review your active academic credentials, session authenticity, and security architecture.
+            Review your academic identity, verified credentials, and active session architecture.
           </p>
         </div>
 
@@ -66,8 +68,11 @@ export const ProfilePage: React.FC = () => {
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-900 truncate">
-                {user?.fullName || user?.email}
+                {user?.fullName || `@${user?.username}`}
               </h2>
+              <p className="text-xs font-semibold text-brand-600 font-mono">
+                @{user?.username}
+              </p>
               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <CheckCircle2 className="h-3 w-3" />
                 <span>Session Active</span>
@@ -77,29 +82,40 @@ export const ProfilePage: React.FC = () => {
 
           <div className="space-y-3 pt-4 border-t border-slate-100 text-xs">
             <div>
-              <span className="text-slate-400 font-medium block mb-0.5">Primary Email</span>
-              <span className="font-semibold text-slate-800 break-all">{user?.email}</span>
+              <span className="text-slate-400 font-medium flex items-center gap-1.5 mb-0.5">
+                <UserIcon className="h-3.5 w-3.5" />
+                Username
+              </span>
+              <span className="font-semibold text-slate-800 font-mono text-sm">
+                {user?.username}
+              </span>
             </div>
 
             <div>
-              <span className="text-slate-400 font-medium block mb-0.5">Full Name</span>
-              <span className="font-semibold text-slate-800">
-                {user?.fullName || (
+              <span className="text-slate-400 font-medium flex items-center gap-1.5 mb-0.5">
+                <Mail className="h-3.5 w-3.5" />
+                Email Address
+              </span>
+              <span className="font-semibold text-slate-800 break-all">
+                {user?.email || (
                   <span className="text-slate-400 font-normal italic">
-                    Not included in login payload (Awaiting GET /api/auth/me)
+                    Not provided (Optional)
                   </span>
                 )}
               </span>
             </div>
 
             <div>
+              <span className="text-slate-400 font-medium block mb-0.5">Full Name</span>
+              <span className="font-semibold text-slate-800">
+                {user?.fullName || 'Not provided'}
+              </span>
+            </div>
+
+            <div>
               <span className="text-slate-400 font-medium block mb-0.5">User ID</span>
               <span className="font-semibold text-slate-800 font-mono text-[11px]">
-                {user?.id || (
-                  <span className="text-slate-400 font-normal italic font-sans">
-                    Awaiting GET /api/auth/me
-                  </span>
-                )}
+                {user?.id || 'Active Session User'}
               </span>
             </div>
           </div>
@@ -140,32 +156,31 @@ export const ProfilePage: React.FC = () => {
                   <span>Credential Hygiene</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  Zero session secrets or passwords in <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">localStorage</code>. Auth state lives strictly in React memory.
+                  Zero session secrets or passwords in <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">localStorage</code>.
                 </p>
               </div>
 
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                  <Shield className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Password Security</span>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Session Restoration</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  BCrypt (strength 10) verified by Spring Security. Passwords restricted to 72 UTF-8 bytes.
+                  <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">GET /api/auth/me</code> automatically re-hydrates authenticated profile on page reload.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Missing Endpoint Documentation Notice */}
-          <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-5 flex items-start gap-3">
-            <Info className="h-5 w-5 text-brand-600 shrink-0 mt-0.5" />
+          {/* Session Restoration Notice */}
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-5 flex items-start gap-3">
+            <Info className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-700 space-y-1.5">
               <p className="font-semibold text-slate-900">
-                Integration Note: Absence of Current User Endpoint (`/api/auth/me`)
+                Phase 4 Complete: Username Authentication & Session Verification
               </p>
               <p className="text-slate-600 leading-relaxed">
-                The backend <code className="bg-blue-100/70 px-1 py-0.5 rounded font-mono text-slate-800">AuthController.login</code> response currently returns only <code className="bg-blue-100/70 px-1 py-0.5 rounded font-mono text-slate-800">&#123;&quot;email&quot;: &quot;...&quot;&#125;</code> and no <code className="bg-blue-100/70 px-1 py-0.5 rounded font-mono text-slate-800">GET /api/auth/me</code> exists. 
-                Because credentials and fake auth tokens are not persisted to <code className="bg-blue-100/70 px-1 py-0.5 rounded font-mono text-slate-800">localStorage</code>, refreshing the browser tab resets in-memory authentication state and prompts a login.
+                Login and registration use unique normalized usernames. The backend exposes <code className="bg-emerald-100/70 px-1 py-0.5 rounded font-mono text-slate-800">GET /api/auth/me</code>, which is queried on initial application mount to restore user state across browser tab refreshes without insecure local token persistence.
               </p>
             </div>
           </div>
