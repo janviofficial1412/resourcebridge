@@ -225,3 +225,44 @@ To facilitate future backend implementation without breaking frontend code, the 
 1. **No Fake Backend Mocking:** We never simulate network successes or store fake mutations in localStorage.
 2. **Clear UI States:** When an institution or resource feature depends on a missing API, the UI clearly displays "Backend API Pending Integration" or provides disabled action states with explanatory tooltips.
 3. **Graceful Degradation:** The UI application structure is fully built and responsive, with dedicated typed service layers ready to connect as soon as backend endpoints are added.
+
+---
+
+## 8. Phase 2 Authentication Implementation Summary
+
+### 8.1. Implemented Frontend Authentication Behavior
+* **Registration Page (`RegisterPage.tsx`):**
+  * Full name (max 200 chars), Email (max 254 chars), Password (min 8 chars, max 72 UTF-8 bytes), Confirm password matching.
+  * Inline validation with accessible error labels (`aria-invalid`, `aria-describedby`).
+  * Calls `POST /api/auth/register` with `skipCsrf: true` (matching backend SecurityConfig exemption) and `credentials: "include"`.
+  * Displays success confirmation banner and redirects to `/login` with pre-filled email.
+  * Handles HTTP 409 Conflict gracefully ("An account with this email already exists") and HTTP 400 validation problems.
+* **Login Page (`LoginPage.tsx`):**
+  * Email and Password fields with show/hide password toggle.
+  * Proactively fetches and passes the `XSRF-TOKEN` in `X-XSRF-TOKEN` request header.
+  * Submits to `POST /api/auth/login` with `credentials: "include"`.
+  * Updates in-memory `AuthContext` with returned `{ email }`.
+  * Redirects to `/dashboard` (or previously requested route preserved in navigation state).
+  * Explicitly differentiates HTTP 401 (invalid credentials), HTTP 403 (CSRF failure), and network reachability errors.
+* **Logout Workflow:**
+  * Embedded in navigation (`Navbar.tsx`).
+  * Submits `POST /api/auth/logout` with CSRF header, invalidating the server session.
+  * Clears React authentication state and navigates to `/login`.
+* **Protected Routes (`ProtectedRoute.tsx`):**
+  * Wraps `/dashboard` and any future authenticated routes.
+  * Redirects unauthenticated visits to `/login`, preserving destination state.
+
+### 8.2. CSRF & Session Cookie Handling
+* **Module:** `src/services/csrf.ts` & `src/services/api.ts`
+* Automatically reads `XSRF-TOKEN` cookie from `document.cookie`.
+* If absent, sends a lightweight probe to trigger Spring Security's `CsrfCookieFilter`.
+* Attaches `X-XSRF-TOKEN: <token>` to all mutating HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`).
+* Passes `credentials: "include"` on every request so Tomcat / Spring Security receives and manages the `JSESSIONID` session cookie.
+
+### 8.3. Known Limitations Caused by Missing `GET /api/auth/me`
+* The backend currently returns only `{ "email": "<user>" }` upon successful login and does **not** expose a current-user endpoint (`/api/auth/me`).
+* To honor security constraints, credentials, session IDs, and simulated authentication states are **never** persisted in `localStorage`.
+* Consequently, session state lives in React memory (`AuthContext`). Refreshing the browser tab will reset in-memory authentication state and require logging in again.
+* **Recommended Backend Enhancement for Future:**
+  * Add `GET /api/auth/me` in `AuthController.java` returning `UserResponse` (`id`, `email`, `fullName`, `createdAt`) from the active `SecurityContextHolder.getContext().getAuthentication()`.
+

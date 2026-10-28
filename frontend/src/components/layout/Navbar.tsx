@@ -1,16 +1,37 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Layers, Menu, X, ArrowRight } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Layers, Menu, X, ArrowRight, LogOut, User as UserIcon, LayoutDashboard } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useAuth } from '../../hooks/useAuth';
 
 export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate('/login');
+    } catch {
+      // If server logout fails, redirect to login nonetheless
+      navigate('/login');
+    } finally {
+      setIsLoggingOut(false);
+      setMobileMenuOpen(false);
+    }
+  };
 
   const navLinks = [
+    ...(isAuthenticated
+      ? [{ label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard className="h-3.5 w-3.5" /> }]
+      : []),
     { label: 'Explore Resources', path: '/discover' },
     { label: 'Institutions', path: '/institutions' },
-    { label: 'How It Works', path: '/#how-it-works' },
+    ...(!isAuthenticated ? [{ label: 'How It Works', path: '/#how-it-works' }] : []),
   ];
 
   return (
@@ -39,27 +60,50 @@ export const Navbar: React.FC = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`text-sm font-medium transition-colors hover:text-brand-600 ${
-                  location.pathname === link.path ? 'text-brand-600' : 'text-slate-600'
+                className={`text-sm font-medium transition-colors hover:text-brand-600 flex items-center gap-1.5 ${
+                  location.pathname === link.path ? 'text-brand-600 font-semibold' : 'text-slate-600'
                 }`}
               >
-                {link.label}
+                {link.icon}
+                <span>{link.label}</span>
               </Link>
             ))}
           </nav>
 
           {/* Desktop CTA actions */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                Log in
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant="primary" size="sm" rightIcon={<ArrowRight className="h-4 w-4" />}>
-                Get Started
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700">
+                  <UserIcon className="h-3.5 w-3.5 text-brand-600" />
+                  <span className="max-w-[160px] truncate" title={user?.email}>
+                    {user?.email}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  isLoading={isLoggingOut}
+                  leftIcon={<LogOut className="h-3.5 w-3.5 text-slate-500" />}
+                >
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">
+                    Log in
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button variant="primary" size="sm" rightIcon={<ArrowRight className="h-4 w-4" />}>
+                    Get Started
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -79,27 +123,50 @@ export const Navbar: React.FC = () => {
       {/* Mobile menu dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-slate-200 bg-white px-4 pt-2 pb-4 space-y-2">
+          {isAuthenticated && user && (
+            <div className="p-3 mb-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+              <span className="text-slate-400 block font-normal">Signed in as</span>
+              <span className="font-semibold text-slate-800 break-all">{user.email}</span>
+            </div>
+          )}
+
           {navLinks.map((link) => (
             <Link
               key={link.path}
               to={link.path}
               onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:bg-slate-100"
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:bg-slate-100"
             >
-              {link.label}
+              {link.icon}
+              <span>{link.label}</span>
             </Link>
           ))}
+
           <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
-            <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="w-full">
-              <Button variant="secondary" className="w-full justify-center">
-                Log in
+            {isAuthenticated ? (
+              <Button
+                variant="secondary"
+                className="w-full justify-center"
+                onClick={handleLogout}
+                isLoading={isLoggingOut}
+                leftIcon={<LogOut className="h-4 w-4" />}
+              >
+                Sign Out
               </Button>
-            </Link>
-            <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="w-full">
-              <Button variant="primary" className="w-full justify-center">
-                Create Account
-              </Button>
-            </Link>
+            ) : (
+              <>
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="w-full">
+                  <Button variant="secondary" className="w-full justify-center">
+                    Log in
+                  </Button>
+                </Link>
+                <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="w-full">
+                  <Button variant="primary" className="w-full justify-center">
+                    Create Account
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
