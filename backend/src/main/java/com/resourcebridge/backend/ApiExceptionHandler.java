@@ -2,6 +2,8 @@ package com.resourcebridge.backend;
 
 import com.resourcebridge.backend.identity.RegistrationService;
 import com.resourcebridge.backend.institution.InstitutionService;
+import com.resourcebridge.backend.resource.ResourceCategoryService;
+import com.resourcebridge.backend.resource.ResourceService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,41 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(InstitutionService.InstitutionAccessDeniedException.class)
     public ResponseEntity<ApiError> handleInstitutionAccessDenied(InstitutionService.InstitutionAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ResourceService.ResourceNotFoundException.class)
+    public ResponseEntity<ApiError> handleResourceNotFound(ResourceService.ResourceNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ResourceService.ResourceAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleResourceAccessDenied(ResourceService.ResourceAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ResourceService.ResourceValidationException.class)
+    public ResponseEntity<ApiError> handleResourceValidation(ResourceService.ResourceValidationException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ResourceCategoryService.DuplicateCategoryException.class)
+    public ResponseEntity<ApiError> handleDuplicateCategory(ResourceCategoryService.DuplicateCategoryException e) {
+        return build(HttpStatus.CONFLICT, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ResourceCategoryService.ResourceCategoryNotFoundException.class)
+    public ResponseEntity<ApiError> handleResourceCategoryNotFound(ResourceCategoryService.ResourceCategoryNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ApiError> handleAuthenticationException(org.springframework.security.core.AuthenticationException e) {
+        return build(HttpStatus.UNAUTHORIZED, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
         return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
     }
 

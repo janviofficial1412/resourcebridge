@@ -9,8 +9,6 @@ import {
   ShieldCheck,
   Activity,
   ArrowRight,
-  X,
-  ExternalLink,
   Lock,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -18,11 +16,12 @@ import { Button } from '../components/ui/Button';
 import { SummaryCard } from '../components/ui/SummaryCard';
 import { EmptyState } from '../components/ui/EmptyState';
 import { institutionService } from '../features/institutions/institutionService';
+import { resourceService } from '../features/resources/resourceService';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const [showShareModal, setShowShareModal] = useState(false);
   const [institutionCount, setInstitutionCount] = useState<number | null>(null);
+  const [sharedResourcesCount, setSharedResourcesCount] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,6 +36,19 @@ export const DashboardPage: React.FC = () => {
           setInstitutionCount(null);
         }
       });
+
+    resourceService.getMyResources()
+      .then((res) => {
+        if (isMounted) {
+          setSharedResourcesCount(res.length);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSharedResourcesCount(null);
+        }
+      });
+
     return () => {
       isMounted = false;
     };
@@ -83,17 +95,18 @@ export const DashboardPage: React.FC = () => {
               </Button>
             </Link>
 
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => setShowShareModal(true)}
-              leftIcon={<Plus className="h-4 w-4 text-slate-400" />}
-            >
-              <span>Share a Resource</span>
-              <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                Phase 5
-              </span>
-            </Button>
+            <Link to="/my-resources">
+              <Button
+                variant="secondary"
+                size="md"
+                leftIcon={<Plus className="h-4 w-4 text-brand-600" />}
+              >
+                <span>Share a Resource</span>
+                <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Active
+                </span>
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
@@ -108,7 +121,7 @@ export const DashboardPage: React.FC = () => {
             <p className="text-xs text-slate-500">Live indicators based on verified backend service responses</p>
           </div>
           <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
-            Phase 4 Institutions Connected
+            Phase 5 Resources Active
           </span>
         </div>
 
@@ -125,12 +138,12 @@ export const DashboardPage: React.FC = () => {
 
           <SummaryCard
             title="Resources Shared by You"
-            value="—"
-            status="pending"
-            badgeText="API Pending"
+            value={sharedResourcesCount !== null ? sharedResourcesCount : '—'}
+            status={sharedResourcesCount !== null ? 'active' : 'pending'}
+            badgeText={sharedResourcesCount !== null ? `${sharedResourcesCount} Active` : 'Checking API'}
             icon={<Briefcase className="h-4 w-4 text-indigo-600" />}
             description="Instruments, tools, or research spaces registered under your ownership."
-            helpText="Awaiting GET /api/resources/my in Phase 5"
+            helpText="Connected to GET /api/resources/my"
           />
 
           <SummaryCard
@@ -191,10 +204,9 @@ export const DashboardPage: React.FC = () => {
           </Link>
 
           {/* Action 2: Share a Resource */}
-          <button
-            type="button"
-            onClick={() => setShowShareModal(true)}
-            className="group text-left bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-slate-300 hover:shadow-sm transition-all flex flex-col justify-between"
+          <Link
+            to="/my-resources"
+            className="group bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="space-y-3">
               <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -202,11 +214,11 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-900 text-sm">
+                  <h3 className="font-semibold text-slate-900 text-sm group-hover:text-brand-600 transition-colors">
                     Share a Resource
                   </h3>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                    Phase 5
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Active
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed mt-1">
@@ -215,11 +227,11 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-              <span className="text-xs font-medium text-amber-600 flex items-center gap-1">
-                Learn status <ExternalLink className="h-3 w-3" />
+              <span className="text-xs font-semibold text-brand-600 flex items-center gap-1">
+                Register resource <ArrowRight className="h-3 w-3" />
               </span>
             </div>
-          </button>
+          </Link>
 
           {/* Action 3: Explore Institutions */}
           <Link
@@ -364,53 +376,6 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* ------------------------------------------------------------------
-          COMING SOON MODAL FOR RESOURCE SHARING
-      ------------------------------------------------------------------- */}
-      {showShareModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="h-10 w-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center border border-brand-100">
-                <Plus className="h-5 w-5" />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowShareModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-                aria-label="Close dialog"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="text-base font-semibold text-slate-900">
-                Resource Sharing Connecting in Phase 5
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Resource creation endpoints (<code className="bg-slate-100 px-1 py-0.5 rounded font-mono">POST /api/resources</code>) and equipment categorization are scheduled for Phase 5. No resources can be registered until that controller is introduced.
-              </p>
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setShowShareModal(false)}>
-                Dismiss
-              </Button>
-              <Link to="/my-resources" onClick={() => setShowShareModal(false)}>
-                <Button variant="primary" size="sm">
-                  View Phase 5 Roadmap
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

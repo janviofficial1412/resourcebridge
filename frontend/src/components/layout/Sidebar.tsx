@@ -68,8 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
       label: 'My Resources',
       path: '/my-resources',
       icon: <Briefcase className="h-4 w-4" />,
-      badge: 'Phase 5',
-      badgeType: 'roadmap',
     },
     {
       label: 'Profile & Session',
