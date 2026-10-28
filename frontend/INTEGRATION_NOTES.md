@@ -266,3 +266,57 @@ To facilitate future backend implementation without breaking frontend code, the 
 * **Recommended Backend Enhancement for Future:**
   * Add `GET /api/auth/me` in `AuthController.java` returning `UserResponse` (`id`, `email`, `fullName`, `createdAt`) from the active `SecurityContextHolder.getContext().getAuthentication()`.
 
+---
+
+## 9. Phase 3: Dashboard & Application Layout Summary
+
+### 9.1. Dashboard Features Implemented
+* **Welcome Section (`DashboardPage.tsx`):**
+  * Displays user's actual name (if available from registration) or email (`user?.fullName || user?.email || 'Scholar'`).
+  * Educational resource sharing description.
+  * Primary action: "Discover Resources" (routes directly to `/discover`).
+  * Secondary action: "Share a Resource" (marked with Phase 5 badge; triggers informative modal detailing pending `POST /api/resources` endpoint).
+* **Summary Cards (`SummaryCard.tsx`):**
+  * Reusable metrics card component with support for active, unavailable, and pending status indicators.
+  * Honest reporting: Displays `—` with `API Pending` badges instead of fabricated metrics.
+  * Cards cover: Available Resources, Resources Shared by You, Joined Institutions, and Pending Invitations.
+* **Quick Actions:**
+  * Interactive cards routing to Discover Resources, Institutions, My Resources, and Share a Resource.
+* **Recent Activity Section:**
+  * Clean UI utilizing reusable `EmptyState.tsx`.
+  * Avoids querying the internal PostgreSQL `audit_log` table directly.
+  * Displays an honest empty state explaining that activity records will appear once institutional reservations and memberships are established.
+* **Security & Session Architecture Transparency:**
+  * Card outlining active session guarantees (`JSESSIONID`, `X-XSRF-TOKEN`, no localStorage persistence, BCrypt password hashing).
+
+### 9.2. Authenticated Application Layout & Navigation
+* **Dedicated Authenticated Shell (`AuthenticatedLayout.tsx`):**
+  * Fixed left desktop sidebar (`w-64`) and slide-over mobile drawer (`w-72`) with backdrop overlay and Escape key dismissal.
+  * Top header bar with dynamic breadcrumbs, mobile menu trigger, and live user session indicator.
+  * Accessibility skip link (`#main-content`) for keyboard and screen-reader users.
+* **Sidebar (`Sidebar.tsx`):**
+  * ResourceBridge branding with "SaaS" badge.
+  * Navigation links: Dashboard (`/dashboard`), Discover Resources (`/discover`), My Resources (`/my-resources`), Institutions (`/institutions`), Profile & Session (`/profile`).
+  * Visual active state indicator with `aria-current="page"`.
+  * Roadmap phase badges for unfinished modules ("Phase 4", "Phase 5").
+  * User profile card with initial avatar, email, and one-click Sign Out button.
+* **Synchronized Public Navbar (`Navbar.tsx`):**
+  * Updated with active navigation highlights and consistent mobile menu.
+* **Adaptive Routing (`App.tsx`):**
+  * Public routes (`/`, `/login`, `/register`) utilize marketing `AppLayout`.
+  * Public-only guard redirects authenticated users away from `/login` or `/register` to `/dashboard`.
+  * `/discover` and `/institutions` adaptively render within `AuthenticatedLayout` when signed in, or `AppLayout` when browsing as a guest.
+  * Protected routes (`/dashboard`, `/my-resources`, `/profile`) strictly require active authentication.
+
+### 9.3. Backend Integration & Unimplemented Endpoints
+* **Existing Backend APIs Used:**
+  * `POST /api/auth/logout`: Stateful session invalidation on Tomcat server with CSRF token verification.
+  * Session credentials: `JSESSIONID` and `X-XSRF-TOKEN` handled via `src/services/api.ts`.
+* **Endpoints Awaiting Backend Implementation:**
+  1. `GET /api/auth/me`: Currently missing. Would allow restoring full user profile and surviving page refreshes without storing credentials in browser storage.
+  2. `GET /api/institutions` & `POST /api/institutions`: Phase 4 Institution Management.
+  3. `GET /api/memberships`: Phase 4 Membership Approvals.
+  4. `GET /api/resources` & `POST /api/resources`: Phase 5 Resource Management & Phase 6 Catalog.
+  5. `GET /api/activity` or `GET /api/audit-logs/my`: Authenticated user activity feed.
+
+
