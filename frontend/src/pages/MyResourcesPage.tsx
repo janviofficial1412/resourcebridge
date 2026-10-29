@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Briefcase,
   Plus,
@@ -27,6 +27,8 @@ import { Loader } from '../components/ui/Loader';
 import { ApiClientError } from '../services/api';
 
 export const MyResourcesPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [resources, setResources] = useState<ResourceResponse[]>([]);
   const [institutions, setInstitutions] = useState<InstitutionSummary[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('');
@@ -89,6 +91,18 @@ export const MyResourcesPage: React.FC = () => {
   const handleOpenDeleteModal = (resource: ResourceResponse) => {
     setResourceToDelete(resource);
   };
+
+  const handleResourceFormSuccess = useCallback(() => {
+    setIsFormModalOpen(false);
+    setResourceToEdit(null);
+
+    if (location.pathname !== '/my-resources') {
+      navigate('/my-resources', { replace: true });
+      return;
+    }
+
+    void fetchResources();
+  }, [fetchResources, location.pathname, navigate]);
 
   // Helper formatting badges
   const renderStatusBadge = (status: string) => {
@@ -335,8 +349,11 @@ export const MyResourcesPage: React.FC = () => {
       {/* Modals */}
       <ResourceFormModal
         isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
-        onSuccess={fetchResources}
+        onClose={() => {
+          setIsFormModalOpen(false);
+          setResourceToEdit(null);
+        }}
+        onSuccess={handleResourceFormSuccess}
         resourceToEdit={resourceToEdit}
         institutions={institutions}
       />
