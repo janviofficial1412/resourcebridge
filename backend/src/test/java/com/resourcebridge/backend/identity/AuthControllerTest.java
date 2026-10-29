@@ -14,6 +14,10 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 
 import java.util.Optional;
 
@@ -69,6 +73,26 @@ class AuthControllerTest {
     }
 
     @Test
+    void successfulLoginPersistsAuthenticationInHttpSession() {
+        LoginRequest request = new LoginRequest("scholar_jane", "Password123");
+        Authentication authenticated = UsernamePasswordAuthenticationToken.authenticated(
+                "scholar_jane", null, java.util.List.of());
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authenticated);
+
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        MockHttpServletResponse servletResponse = new MockHttpServletResponse();
+        ResponseEntity<?> response = authController.login(request, servletRequest, servletResponse);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        SecurityContext sessionContext = (SecurityContext) servletRequest.getSession(false)
+                .getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        Authentication sessionAuthentication = sessionContext == null ? null : sessionContext.getAuthentication();
+        assertNotNull(sessionAuthentication);
+        assertEquals("scholar_jane", sessionAuthentication.getName());
+    }
+
+    @Test
     void invalidUsernamePasswordRejection() {
         LoginRequest request = new LoginRequest("scholar_jane", "WrongPassword");
 
@@ -110,6 +134,29 @@ class AuthControllerTest {
     @Test
     void getCurrentUserUnauthenticatedReturns401() {
         ResponseEntity<?> response = authController.getCurrentUser(null);
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
+
+    @Test
+    void getCurrentUserRejectsAnonymousAuthentication() {
+        Authentication anonymous = mock(Authentication.class);
+        when(anonymous.isAuthenticated()).thenReturn(true);
+        when(anonymous.getName()).thenReturn("anonymousUser");
+
+        ResponseEntity<?> response = authController.getCurrentUser(anonymous);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
+
+    @Test
+    void getCurrentUserRejectsAuthenticatedSessionForMissingUser() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getName()).thenReturn("deleted_user");
+        when(appUserRepository.findByUsername("deleted_user")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = authController.getCurrentUser(authentication);
+
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
     }
 }

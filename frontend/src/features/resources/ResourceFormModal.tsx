@@ -11,6 +11,8 @@ import {
   UpdateResourceRequest,
 } from './resourceTypes';
 import { resourceService } from './resourceService';
+import { ResourcePhoto } from './ResourcePhoto';
+import { validateImageFile } from '../images/validateImageFile';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ApiClientError } from '../../services/api';
@@ -34,6 +36,9 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
 
   // Form states
   const [institutionId, setInstitutionId] = useState<string>('');
+  const canManageCategories = institutions.some(
+    (institution) => institution.id === institutionId && institution.role === 'ADMIN'
+  );
   const [categoryId, setCategoryId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -43,6 +48,11 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
   const [status, setStatus] = useState<ResourceStatus>('AVAILABLE');
   const [requiresApproval, setRequiresApproval] = useState<boolean>(true);
   const [maxBookingMinutes, setMaxBookingMinutes] = useState<string>('');
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false);
+  const [createdResourceId, setCreatedResourceId] = useState<string | null>(null);
 
   // Categories list for selected institution
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
@@ -92,6 +102,10 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
       setMaxBookingMinutes('');
     }
 
+    setSelectedPhoto(null);
+    setPhotoError(null);
+    setRemoveExistingPhoto(false);
+    setCreatedResourceId(null);
     setFormErrors({});
     setGeneralError(null);
     setShowNewCategory(false);
@@ -99,6 +113,20 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
     setNewCatDescription('');
     setCategoryError(null);
   }, [isOpen, resourceToEdit, institutions]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPhotoPreviewUrl(null);
+      return;
+    }
+    if (!selectedPhoto) {
+      setPhotoPreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(selectedPhoto);
+    setPhotoPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [isOpen, selectedPhoto]);
 
   // Load categories whenever selected institution changes
   useEffect(() => {
@@ -206,14 +234,17 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (photoError) return;
     if (!validate()) return;
 
     setIsSubmitting(true);
     setGeneralError(null);
 
     const parsedMins = maxBookingMinutes.trim() ? parseInt(maxBookingMinutes, 10) : undefined;
+    let savedResourceId: string | null = null;
 
     try {
+      let resourceId: string;
       if (isEditing && resourceToEdit) {
         const updatePayload: UpdateResourceRequest = {
           name: name.trim(),
@@ -227,6 +258,21 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           maxBookingMinutes: parsedMins,
         };
         await resourceService.updateResource(resourceToEdit.id, updatePayload);
+        resourceId = resourceToEdit.id;
+      } else if (createdResourceId) {
+        const updatePayload: UpdateResourceRequest = {
+          name: name.trim(),
+          description: description.trim(),
+          categoryId,
+          resourceType,
+          location: location.trim() || undefined,
+          conditionRating,
+          status,
+          requiresApproval,
+          maxBookingMinutes: parsedMins,
+        };
+        await resourceService.updateResource(createdResourceId, updatePayload);
+        resourceId = createdResourceId;
       } else {
         const createPayload: CreateResourceRequest = {
           institutionId,
@@ -240,12 +286,24 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           requiresApproval,
           maxBookingMinutes: parsedMins,
         };
-        await resourceService.createResource(createPayload);
+        const created = await resourceService.createResource(createPayload);
+        resourceId = created.id;
+        setCreatedResourceId(created.id);
+      }
+      savedResourceId = resourceId;
+
+      if (selectedPhoto) {
+        await resourceService.uploadResourceImage(resourceId, selectedPhoto);
+      } else if (removeExistingPhoto && resourceToEdit?.imageId) {
+        await resourceService.removeResourceImage(resourceId);
       }
 
       onSuccess();
       onClose();
     } catch (err) {
+      const savedMessage = savedResourceId
+        ? ' Resource details were saved; retry Save to retry the photo change without creating another resource.'
+        : '';
       if (err instanceof ApiClientError) {
         if (err.fieldErrors && err.fieldErrors.length > 0) {
           const fieldMap: Record<string, string> = {};
@@ -254,9 +312,9 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
           });
           setFormErrors(fieldMap);
         }
-        setGeneralError(err.message || 'Operation failed');
+        setGeneralError((err.message || 'Operation failed') + savedMessage);
       } else {
-        setGeneralError('Network error: Unable to save resource');
+        setGeneralError(`Network error: Unable to save resource.${savedMessage}`);
       }
     } finally {
       setIsSubmitting(false);
@@ -275,13 +333,15 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
         <div className="flex items-start justify-between pb-4 border-b border-slate-100">
           <div>
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-brand-50 text-brand-700 text-xs font-semibold border border-brand-200 mb-1.5">
-              <span>{isEditing ? 'Resource Modification' : 'New Resource Registration'}</span>
+              <span>              {isEditing || createdResourceId ? 'Resource Modification' : 'New Resource Registration'}</span>
             </div>
             <h2 id="resource-modal-title" className="text-xl font-bold text-slate-900">
-              {isEditing ? `Edit "${resourceToEdit?.name}"` : 'Share a Campus Resource'}
+              {isEditing || createdResourceId
+                ? `Edit "${resourceToEdit?.name || name}"`
+                : 'Share a Campus Resource'}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              {isEditing
+              {isEditing || createdResourceId
                 ? 'Update equipment details, availability status, or booking rules.'
                 : 'Register laboratory equipment, spaces, or tools under your institutional membership.'}
             </p>
@@ -309,32 +369,121 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
             <label htmlFor="res-inst" className="block text-xs font-semibold text-slate-700 tracking-wide mb-1.5">
               Owning Institution <span className="text-red-500">*</span>
             </label>
-            {isEditing ? (
+            {isEditing || createdResourceId ? (
               <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700">
-                {resourceToEdit?.institutionName || 'Selected Institution'} (Locked)
+                {resourceToEdit?.institutionName
+                  || institutions.find((institution) => institution.id === institutionId)?.name
+                  || 'Selected Institution'} (Locked)
               </div>
             ) : (
-              <select
-                id="res-inst"
-                value={institutionId}
-                onChange={(e) => {
-                  setInstitutionId(e.target.value);
-                  if (formErrors.institutionId) {
-                    setFormErrors((prev) => ({ ...prev, institutionId: '' }));
-                  }
-                }}
-                className="w-full text-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                {institutions.map((inst) => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.name} ({inst.slug})
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  id="res-inst"
+                  value={institutionId}
+                  onChange={(e) => {
+                    setInstitutionId(e.target.value);
+                    setShowNewCategory(false);
+                    setCategoryError(null);
+                    if (formErrors.institutionId) {
+                      setFormErrors((prev) => ({ ...prev, institutionId: '' }));
+                    }
+                  }}
+                  className="w-full text-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  {institutions.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.name} ({inst.slug})
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const selectedInstitution = institutions.find((institution) => institution.id === institutionId);
+                  return selectedInstitution && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                      <ResourcePhoto
+                        imageId={selectedInstitution.logoId}
+                        alt={`${selectedInstitution.name} logo`}
+                        className="h-8 w-8 rounded object-cover border border-slate-200"
+                      />
+                      <span>{selectedInstitution.name}</span>
+                    </div>
+                  );
+                })()}
+              </>
             )}
             {formErrors.institutionId && (
               <p className="text-xs text-red-600 mt-1">{formErrors.institutionId}</p>
             )}
+          </div>
+
+          {/* Resource photo */}
+          <div className="space-y-2">
+            <label htmlFor="resource-photo" className="block text-xs font-semibold text-slate-700 tracking-wide">
+              Resource Photo <span className="font-normal text-slate-500">(optional, JPEG/PNG/WebP up to 5 MB)</span>
+            </label>
+            <div className="flex flex-col sm:flex-row gap-3 items-start">
+              <div className="w-full sm:w-48 h-32 overflow-hidden rounded-lg border border-slate-200">
+                {photoPreviewUrl ? (
+                  <img src={photoPreviewUrl} alt="Selected resource photo preview" className="h-full w-full object-cover" />
+                ) : resourceToEdit?.imageId && !removeExistingPhoto ? (
+                  <ResourcePhoto imageId={resourceToEdit.imageId} alt={`${resourceToEdit.name} photo`} className="h-full w-full object-cover" />
+                ) : (
+                  <ResourcePhoto alt="No resource photo selected" className="h-full w-full object-cover" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  id="resource-photo"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const validationError = validateImageFile(file);
+                    if (validationError) {
+                      setPhotoError(validationError);
+                      event.target.value = '';
+                      return;
+                    }
+                    setSelectedPhoto(file);
+                    setRemoveExistingPhoto(false);
+                    setPhotoError(null);
+                  }}
+                  className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+                />
+                {selectedPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPhoto(null);
+                      setPhotoError(null);
+                    }}
+                    className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                  >
+                    Remove selected photo
+                  </button>
+                )}
+                {!selectedPhoto && resourceToEdit?.imageId && !removeExistingPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => setRemoveExistingPhoto(true)}
+                    className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                  >
+                    Remove current photo
+                  </button>
+                )}
+                {removeExistingPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => setRemoveExistingPhoto(false)}
+                    className="text-xs font-medium text-slate-600 hover:text-slate-800"
+                  >
+                    Keep current photo
+                  </button>
+                )}
+                {photoError && <p role="alert" className="text-xs text-rose-600">{photoError}</p>}
+              </div>
+            </div>
           </div>
 
           {/* Category Selection + Inline Creation */}
@@ -343,7 +492,7 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
               <label htmlFor="res-cat" className="block text-xs font-semibold text-slate-700 tracking-wide">
                 Resource Category <span className="text-red-500">*</span>
               </label>
-              {!showNewCategory && (
+              {canManageCategories && !showNewCategory && (
                 <button
                   type="button"
                   onClick={() => setShowNewCategory(true)}
@@ -355,7 +504,7 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
             </div>
 
             {/* Inline Category Creation Box */}
-            {showNewCategory && (
+            {canManageCategories && showNewCategory && (
               <div className="p-3.5 mb-2.5 rounded-xl bg-slate-50 border border-brand-200 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-brand-900">Create New Category</span>
@@ -581,7 +730,7 @@ export const ResourceFormModal: React.FC<ResourceFormModalProps> = ({
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="md" isLoading={isSubmitting}>
-              {isEditing ? 'Save Changes' : 'Register Resource'}
+              {isEditing || createdResourceId ? 'Save Changes' : 'Register Resource'}
             </Button>
           </div>
         </form>

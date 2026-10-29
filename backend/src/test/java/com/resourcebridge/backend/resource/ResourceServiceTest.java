@@ -81,7 +81,7 @@ class ResourceServiceTest {
         otherLab = new Institution("Bioengineering Core", "bio-core", "UTC");
         ReflectionTestUtils.setField(otherLab, "id", UUID.randomUUID());
 
-        janeMembership = new Membership(scholarJane, apexLab, "RESOURCE_OWNER", "ACTIVE", Instant.now());
+        janeMembership = new Membership(scholarJane, apexLab, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(janeMembership, "id", UUID.randomUUID());
 
         bobMembership = new Membership(colleagueBob, apexLab, "MEMBER", "ACTIVE", Instant.now());
@@ -128,6 +128,11 @@ class ResourceServiceTest {
                 240
         );
         when(resourceRepository.saveAndFlush(any(Resource.class))).thenReturn(savedResource);
+        UUID savedResourceId = UUID.randomUUID();
+        ReflectionTestUtils.setField(savedResource, "id", savedResourceId);
+
+        when(resourceRepository.findByIdWithDetails(savedResourceId))
+                .thenReturn(Optional.of(savedResource));
 
         Resource result = resourceService.createResource(command, "scholar_jane");
 
@@ -281,7 +286,7 @@ class ResourceServiceTest {
                 ResourceType.EQUIPMENT
         );
 
-        Membership bobAdminMembership = new Membership(colleagueBob, apexLab, "INSTITUTION_ADMIN", "ACTIVE", Instant.now());
+        Membership bobAdminMembership = new Membership(colleagueBob, apexLab, "ADMIN", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(bobAdminMembership, "id", UUID.randomUUID());
 
         when(appUserRepository.findByUsername("colleague_bob")).thenReturn(Optional.of(colleagueBob));
@@ -313,6 +318,47 @@ class ResourceServiceTest {
     }
 
     @Test
+    void administratorMembershipInAnotherInstitutionCannotModifyResource() {
+        UUID resourceId = UUID.randomUUID();
+        Resource existingResource = new Resource(
+                apexLab, janeMembership, microscopeCategory, "Microscope", ResourceType.EQUIPMENT);
+        Institution otherInstitution = new Institution("Other Lab", "other-lab", "UTC");
+        Membership adminElsewhere = new Membership(colleagueBob, otherInstitution, "ADMIN", "ACTIVE", Instant.now());
+        ReflectionTestUtils.setField(adminElsewhere, "id", UUID.randomUUID());
+
+        when(appUserRepository.findByUsername("colleague_bob")).thenReturn(Optional.of(colleagueBob));
+        when(resourceRepository.findById(resourceId)).thenReturn(Optional.of(existingResource));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(colleagueBob.getId(), apexLab.getId()))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceService.updateResource(resourceId,
+                        new ResourceService.UpdateResourceCommand("Changed", null, null, null, null,
+                                null, null, null, null), "colleague_bob"));
+    }
+
+    @Test
+    void inactiveResourceOwnerCannotUpdateOrDeleteOwnResource() {
+        UUID resourceId = UUID.randomUUID();
+        Resource existingResource = new Resource(
+                apexLab, janeMembership, microscopeCategory, "Microscope", ResourceType.EQUIPMENT);
+        Membership inactive = new Membership(scholarJane, apexLab, "MEMBER", "SUSPENDED", null);
+        ReflectionTestUtils.setField(inactive, "id", janeMembership.getId());
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(resourceRepository.findById(resourceId)).thenReturn(Optional.of(existingResource));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), apexLab.getId()))
+                .thenReturn(Optional.of(inactive));
+
+        assertThrows(ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceService.updateResource(resourceId,
+                        new ResourceService.UpdateResourceCommand("Changed", null, null, null, null,
+                                null, null, null, null), "scholar_jane"));
+        assertThrows(ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceService.deleteResource(resourceId, "scholar_jane"));
+    }
+
+    @Test
     void resourceOwnerCanUpdateOwnResource() {
         UUID resourceId = UUID.randomUUID();
         Resource existingResource = new Resource(
@@ -325,6 +371,8 @@ class ResourceServiceTest {
 
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
         when(resourceRepository.findById(resourceId)).thenReturn(Optional.of(existingResource));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), apexLab.getId()))
+                .thenReturn(Optional.of(janeMembership));
         when(resourceRepository.saveAndFlush(any(Resource.class))).thenReturn(existingResource);
 
         ResourceService.UpdateResourceCommand updateCommand = new ResourceService.UpdateResourceCommand(
@@ -407,9 +455,10 @@ class ResourceServiceTest {
     @Test
     void duplicateCategoryNameIsRejectedCaseInsensitive() {
         UUID institutionId = apexLab.getId();
+        Membership adminMembership = new Membership(scholarJane, apexLab, "ADMIN", "ACTIVE", Instant.now());
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
-                .thenReturn(Optional.of(janeMembership));
+                .thenReturn(Optional.of(adminMembership));
         when(resourceCategoryRepository.existsByInstitution_IdAndNameIgnoreCase(institutionId, "ELECTRON MICROSCOPY"))
                 .thenReturn(true);
 
@@ -421,11 +470,12 @@ class ResourceServiceTest {
     }
 
     @Test
-    void categoryCreationSucceedsForActiveMember() {
+    void categoryCreationSucceedsForActiveAdministrator() {
         UUID institutionId = apexLab.getId();
+        Membership adminMembership = new Membership(scholarJane, apexLab, "ADMIN", "ACTIVE", Instant.now());
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
-                .thenReturn(Optional.of(janeMembership));
+                .thenReturn(Optional.of(adminMembership));
         when(resourceCategoryRepository.existsByInstitution_IdAndNameIgnoreCase(institutionId, "Cleanroom Spaces"))
                 .thenReturn(false);
 
@@ -439,6 +489,17 @@ class ResourceServiceTest {
         assertNotNull(created);
         assertEquals("Cleanroom Spaces", created.getName());
         assertEquals("ISO 5 cleanroom areas", created.getDescription());
+    }
+
+    @Test
+    void activeMemberCannotCreateCategory() {
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), apexLab.getId()))
+                .thenReturn(Optional.of(janeMembership));
+
+        assertThrows(ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceCategoryService.createCategory(
+                        apexLab.getId(), "Restricted", null, "scholar_jane"));
     }
 
     @Test
@@ -471,7 +532,7 @@ class ResourceServiceTest {
                 "Cryo-EM Station", ResourceType.EQUIPMENT);
         available.setStatus(ResourceStatus.AVAILABLE);
 
-        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, null, null))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -480,6 +541,35 @@ class ResourceServiceTest {
         assertEquals(1, results.size());
         assertEquals("Cryo-EM Station", results.get(0).getName());
         assertEquals(ResourceStatus.AVAILABLE, results.get(0).getStatus());
+    }
+
+    @Test
+    void discoverResourcesWithoutInstitutionUsesAllActiveMemberships() {
+        UUID secondInstitutionId = otherLab.getId();
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findActiveInstitutionIdsByUserId(scholarJane.getId()))
+                .thenReturn(List.of(apexLab.getId(), secondInstitutionId));
+        when(resourceRepository.findDiscoverable(
+                null, List.of(apexLab.getId(), secondInstitutionId), null, null, null, null))
+                .thenReturn(List.of());
+
+        List<Resource> results = resourceService.discoverResources(
+                null, null, null, null, null, "scholar_jane");
+
+        assertTrue(results.isEmpty());
+        verify(resourceRepository).findDiscoverable(
+                null, List.of(apexLab.getId(), secondInstitutionId), null, null, null, null);
+    }
+
+    @Test
+    void discoverResourcesWithoutActiveMembershipsReturnsEmptyWithoutQueryingResources() {
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findActiveInstitutionIdsByUserId(scholarJane.getId()))
+                .thenReturn(List.of());
+
+        assertTrue(resourceService.discoverResources(
+                null, null, null, null, null, "scholar_jane").isEmpty());
+        org.mockito.Mockito.verifyNoInteractions(resourceRepository);
     }
 
     @Test
@@ -498,7 +588,7 @@ class ResourceServiceTest {
     @Test
     void discoverResourcesRejectsInactiveMember() {
         UUID institutionId = apexLab.getId();
-        Membership inactiveMembership = new Membership(scholarJane, apexLab, "RESOURCE_OWNER", "PENDING", Instant.now());
+        Membership inactiveMembership = new Membership(scholarJane, apexLab, "MEMBER", "PENDING", Instant.now());
         ReflectionTestUtils.setField(inactiveMembership, "id", UUID.randomUUID());
 
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
@@ -546,7 +636,7 @@ class ResourceServiceTest {
                 "Scope A", ResourceType.EQUIPMENT);
         available.setStatus(ResourceStatus.AVAILABLE);
 
-        when(resourceRepository.findDiscoverable(institutionId, null, catId, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, catId, null, null))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -568,7 +658,7 @@ class ResourceServiceTest {
                 "Cryo-EM", ResourceType.EQUIPMENT);
         available.setStatus(ResourceStatus.AVAILABLE);
 
-        when(resourceRepository.findDiscoverable(institutionId, "cryo", null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), "cryo", null, null, null))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -590,7 +680,7 @@ class ResourceServiceTest {
                 "Lab Space A", ResourceType.SPACE);
         available.setStatus(ResourceStatus.AVAILABLE);
 
-        when(resourceRepository.findDiscoverable(institutionId, null, null, ResourceType.SPACE, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, ResourceType.SPACE, null))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -613,7 +703,7 @@ class ResourceServiceTest {
         available.setStatus(ResourceStatus.AVAILABLE);
         available.setConditionRating(ConditionRating.POOR);
 
-        when(resourceRepository.findDiscoverable(institutionId, null, null, null, ConditionRating.POOR))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, null, ConditionRating.POOR))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -630,7 +720,7 @@ class ResourceServiceTest {
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
                 .thenReturn(Optional.of(janeMembership));
-        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, null, null))
                 .thenReturn(List.of());
 
         // blank search "   " should be treated as no filter
@@ -640,7 +730,7 @@ class ResourceServiceTest {
         assertEquals(0, results.size());
         // Verify repository was called with null search, not the whitespace string
         org.mockito.Mockito.verify(resourceRepository)
-                .findDiscoverable(institutionId, null, null, null, null);
+                .findDiscoverable(institutionId, List.of(institutionId), null, null, null, null);
     }
 
     // -----------------------------------------------------------------------
@@ -665,7 +755,7 @@ class ResourceServiceTest {
                 "Cryo-EM Station", ResourceType.EQUIPMENT);
         available.setStatus(ResourceStatus.AVAILABLE);
 
-        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, null, null))
                 .thenReturn(List.of(available));
 
         List<Resource> results = resourceService.discoverResources(
@@ -679,6 +769,7 @@ class ResourceServiceTest {
         org.mockito.Mockito.verify(resourceRepository)
                 .findDiscoverable(
                         org.mockito.ArgumentMatchers.eq(institutionId),
+                        org.mockito.ArgumentMatchers.eq(List.of(institutionId)),
                         searchCaptor.capture(),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),
@@ -698,7 +789,7 @@ class ResourceServiceTest {
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
                 .thenReturn(Optional.of(janeMembership));
 
-        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), null, null, null, null))
                 .thenReturn(List.of());
 
         List<Resource> results = resourceService.discoverResources(
@@ -710,6 +801,7 @@ class ResourceServiceTest {
         org.mockito.Mockito.verify(resourceRepository)
                 .findDiscoverable(
                         org.mockito.ArgumentMatchers.eq(institutionId),
+                        org.mockito.ArgumentMatchers.eq(List.of(institutionId)),
                         searchCaptor.capture(),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),
@@ -735,7 +827,7 @@ class ResourceServiceTest {
         noMatch.setStatus(ResourceStatus.AVAILABLE);
 
         // Repository is stubbed to return only the matching resource for search "cryo"
-        when(resourceRepository.findDiscoverable(institutionId, "cryo", null, null, null))
+        when(resourceRepository.findDiscoverable(institutionId, List.of(institutionId), "cryo", null, null, null))
                 .thenReturn(List.of(match));
 
         // The frontend may send leading/trailing whitespace; the service must trim it.
@@ -750,6 +842,7 @@ class ResourceServiceTest {
         org.mockito.Mockito.verify(resourceRepository)
                 .findDiscoverable(
                         org.mockito.ArgumentMatchers.eq(institutionId),
+                        org.mockito.ArgumentMatchers.eq(List.of(institutionId)),
                         searchCaptor.capture(),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),

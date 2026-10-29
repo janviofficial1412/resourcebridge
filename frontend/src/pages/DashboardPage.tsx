@@ -84,32 +84,53 @@ export const DashboardPage: React.FC = () => {
 
           {/* Action CTAs */}
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/discover">
-              <Button
-                variant="primary"
-                size="md"
-                leftIcon={<Compass className="h-4 w-4" />}
-                rightIcon={<ArrowRight className="h-4 w-4" />}
-              >
-                Discover Resources
-              </Button>
-            </Link>
+            {institutionCount === 0 ? (
+              <Link to="/institutions">
+                <Button variant="primary" size="md" leftIcon={<Plus className="h-4 w-4" />}>
+                  Create or Manage Institutions
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/discover">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    leftIcon={<Compass className="h-4 w-4" />}
+                    rightIcon={<ArrowRight className="h-4 w-4" />}
+                  >
+                    Discover Resources
+                  </Button>
+                </Link>
 
-            <Link to="/my-resources">
-              <Button
-                variant="secondary"
-                size="md"
-                leftIcon={<Plus className="h-4 w-4 text-brand-600" />}
-              >
-                <span>Share a Resource</span>
-                <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Active
-                </span>
-              </Button>
-            </Link>
+                <Link to="/my-resources">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    leftIcon={<Plus className="h-4 w-4 text-brand-600" />}
+                  >
+                    <span>Share a Resource</span>
+                    <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Active
+                    </span>
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {institutionCount === 0 && (
+        <EmptyState
+          icon={<Building2 className="h-7 w-7 text-brand-600" />}
+          title="Create an institution to get started"
+          badgeText="No active memberships"
+          description="Your account remains active, but resources and bookings require an active institution membership. Creating an institution is available; joining an existing one is not yet supported."
+          actionLabel="Create Institution"
+          actionHref="/institutions"
+        />
+      )}
 
       {/* ------------------------------------------------------------------
           B. SUMMARY CARDS (HONEST REPORTING WITH LIVE INSTITUTIONS)

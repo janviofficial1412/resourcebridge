@@ -45,8 +45,9 @@ public class ResourceCategoryService {
         AppUser user = getAuthenticatedUser(currentUsername);
         Membership membership = verifyActiveMembership(user.getId(), institutionId);
 
-        if ("BORROWER".equalsIgnoreCase(membership.getRole())) {
-            throw new ResourceService.ResourceAccessDeniedException("Borrowers cannot create resource categories");
+        if (!"ADMIN".equalsIgnoreCase(membership.getRole())) {
+            throw new ResourceService.ResourceAccessDeniedException(
+                    "Only institution administrators can create resource categories");
         }
 
         if (name == null || name.isBlank()) {

@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { AuthenticatedLayout } from './components/layout/AuthenticatedLayout';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { ActiveMembershipRoute } from './components/layout/ActiveMembershipRoute';
 import { useAuth } from './hooks/useAuth';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
@@ -20,12 +21,6 @@ import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { Loader } from './components/ui/Loader';
 
-// Renders AuthenticatedLayout if user is signed in, otherwise public AppLayout
-const AdaptiveAppLayout: React.FC = () => {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <AuthenticatedLayout /> : <AppLayout />;
-};
-
 // Redirects authenticated users away from login/register to dashboard
 const PublicOnlyRoute: React.FC<{ element: React.ReactElement }> = ({ element }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -38,9 +33,20 @@ const PublicOnlyRoute: React.FC<{ element: React.ReactElement }> = ({ element })
   return element;
 };
 
+const AuthStatusMessage: React.FC = () => {
+  const { authError } = useAuth();
+  if (!authError) return null;
+  return (
+    <div role="alert" className="mx-auto mt-4 max-w-7xl rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+      {authError}
+    </div>
+  );
+};
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
+      <AuthStatusMessage />
       <Routes>
         {/* Public Marketing Layout */}
         <Route path="/" element={<AppLayout />}>
@@ -50,22 +56,20 @@ export const App: React.FC = () => {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 
-        {/* Dual-Mode Routes (Public or Authenticated depending on session) */}
-        <Route element={<AdaptiveAppLayout />}>
-          <Route path="discover" element={<DiscoverPage />} />
-          <Route path="institutions" element={<InstitutionsPage />} />
-        </Route>
-
-        {/* Strictly Protected Authenticated Routes */}
+        {/* Authenticated application routes */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AuthenticatedLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="institutions/:id" element={<InstitutionDetailPage />} />
-            <Route path="my-resources" element={<MyResourcesPage />} />
-            <Route path="resources/:id" element={<ResourceDetailPage />} />
-            <Route path="bookings" element={<MyBookingsPage />} />
-            <Route path="bookings/incoming" element={<IncomingBookingsPage />} />
+            <Route path="institutions" element={<InstitutionsPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route element={<ActiveMembershipRoute />}>
+              <Route path="discover" element={<DiscoverPage />} />
+              <Route path="institutions/:id" element={<InstitutionDetailPage />} />
+              <Route path="my-resources" element={<MyResourcesPage />} />
+              <Route path="resources/:id" element={<ResourceDetailPage />} />
+              <Route path="bookings" element={<MyBookingsPage />} />
+              <Route path="bookings/incoming" element={<IncomingBookingsPage />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

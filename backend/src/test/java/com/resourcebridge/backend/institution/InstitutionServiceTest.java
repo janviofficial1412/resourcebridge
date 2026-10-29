@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -71,13 +72,14 @@ class InstitutionServiceTest {
         assertNotNull(response);
         assertEquals("Apex Robotics Institute", response.name());
         assertEquals("apex-robotics", response.slug());
-        assertEquals("INSTITUTION_ADMIN", response.role());
+        assertEquals("ADMIN", response.role());
         assertEquals("ACTIVE", response.membershipStatus());
+        assertNull(response.logoId());
 
         ArgumentCaptor<Membership> membershipCaptor = ArgumentCaptor.forClass(Membership.class);
         verify(membershipRepository).saveAndFlush(membershipCaptor.capture());
         Membership createdMembership = membershipCaptor.getValue();
-        assertEquals("INSTITUTION_ADMIN", createdMembership.getRole());
+        assertEquals("ADMIN", createdMembership.getRole());
         assertEquals("ACTIVE", createdMembership.getStatus());
         assertNotNull(createdMembership.getVerifiedAt());
     }
@@ -119,19 +121,55 @@ class InstitutionServiceTest {
     }
 
     @Test
-    void listMyInstitutionsReturnsOnlyUserMemberships() {
+    void listMyInstitutionsIncludesAnActiveMembership() {
         when(appUserRepository.findByUsername("test_admin")).thenReturn(Optional.of(adminUser));
 
         Institution inst = new Institution("Apex Lab", "apex-lab", "UTC");
-        Membership membership = new Membership(adminUser, inst, "INSTITUTION_ADMIN", "ACTIVE", null);
+        Membership membership = new Membership(adminUser, inst, "ADMIN", "ACTIVE", null);
 
-        when(membershipRepository.findByUserIdWithInstitution(any())).thenReturn(List.of(membership));
+        when(membershipRepository.findActiveByUserIdWithInstitution(any())).thenReturn(List.of(membership));
 
         List<InstitutionSummaryResponse> result = institutionService.listMyInstitutions("test_admin");
 
         assertEquals(1, result.size());
         assertEquals("Apex Lab", result.get(0).name());
-        assertEquals("INSTITUTION_ADMIN", result.get(0).role());
+        assertEquals("ADMIN", result.get(0).role());
+    }
+
+    @Test
+    void listMyInstitutionsExcludesInactiveMembership() {
+        when(appUserRepository.findByUsername("test_admin")).thenReturn(Optional.of(adminUser));
+        Institution institution = new Institution("Pending Lab", "pending-lab", "UTC");
+        Membership pendingMembership = new Membership(
+                adminUser, institution, "MEMBER", "PENDING", null);
+        when(membershipRepository.findActiveByUserIdWithInstitution(any()))
+                .thenReturn(List.of(pendingMembership));
+
+        assertEquals(0, institutionService.listMyInstitutions("test_admin").size());
+    }
+
+    @Test
+    void listMyInstitutionsIncludesOnlyInstitutionsWithActiveMemberships() {
+        when(appUserRepository.findByUsername("test_admin")).thenReturn(Optional.of(adminUser));
+
+        Institution activeInstitution = new Institution("Active Lab", "active-lab", "UTC");
+        ReflectionTestUtils.setField(activeInstitution, "id", UUID.randomUUID());
+        Institution inactiveInstitution = new Institution("Pending Lab", "pending-lab", "UTC");
+        ReflectionTestUtils.setField(inactiveInstitution, "id", UUID.randomUUID());
+
+        Membership activeMembership = new Membership(
+                adminUser, activeInstitution, "MEMBER", "ACTIVE", null);
+        Membership pendingMembership = new Membership(
+                adminUser, inactiveInstitution, "MEMBER", "PENDING", null);
+
+        when(membershipRepository.findActiveByUserIdWithInstitution(any()))
+                .thenReturn(List.of(activeMembership, pendingMembership));
+
+        List<InstitutionSummaryResponse> result = institutionService.listMyInstitutions("test_admin");
+
+        assertEquals(1, result.size());
+        assertEquals(activeInstitution.getId(), result.get(0).id());
+        assertEquals("ACTIVE", result.get(0).membershipStatus());
     }
 
     @Test
@@ -142,17 +180,17 @@ class InstitutionServiceTest {
         Institution inst = new Institution("Apex Lab", "apex-lab", "UTC");
         ReflectionTestUtils.setField(inst, "id", institutionId);
 
-        Membership primaryMembership = new Membership(adminUser, inst, "INSTITUTION_ADMIN", "ACTIVE", null);
+        Membership primaryMembership = new Membership(adminUser, inst, "ADMIN", "ACTIVE", null);
         Membership duplicateMembership = new Membership(adminUser, inst, "MEMBER", "ACTIVE", null);
 
-        when(membershipRepository.findByUserIdWithInstitution(any())).thenReturn(List.of(primaryMembership, duplicateMembership));
+        when(membershipRepository.findActiveByUserIdWithInstitution(any())).thenReturn(List.of(primaryMembership, duplicateMembership));
 
         List<InstitutionSummaryResponse> result = institutionService.listMyInstitutions("test_admin");
 
         assertEquals(1, result.size());
         assertEquals(institutionId, result.get(0).id());
         assertEquals("Apex Lab", result.get(0).name());
-        assertEquals("INSTITUTION_ADMIN", result.get(0).role());
+        assertEquals("ADMIN", result.get(0).role());
         assertEquals("ACTIVE", result.get(0).membershipStatus());
     }
 

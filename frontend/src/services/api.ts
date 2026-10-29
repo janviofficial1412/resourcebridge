@@ -49,6 +49,7 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   skipCsrf?: boolean;
   silent?: boolean;
+  responseType?: 'json' | 'blob';
 }
 
 const RAW_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
@@ -78,6 +79,7 @@ export async function apiRequest<T = unknown>(
     body,
     headers = {},
     skipCsrf = false,
+    responseType = 'json',
     ...customConfig
   } = options;
 
@@ -124,6 +126,10 @@ export async function apiRequest<T = unknown>(
       [],
       true
     );
+  }
+
+  if (response.ok && responseType === 'blob') {
+    return await response.blob() as T;
   }
 
   // Handle 204 No Content
@@ -188,6 +194,8 @@ export async function apiRequest<T = unknown>(
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'GET' }),
+  getBlob: (path: string, options?: RequestOptions) =>
+    apiRequest<Blob>(path, { ...options, method: 'GET', responseType: 'blob' }),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'POST', body }),
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>

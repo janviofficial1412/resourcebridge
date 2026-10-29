@@ -1,11 +1,18 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { AuthUser, LoginCredentials, RegisterCredentials, UserResponse } from '../features/auth/authTypes';
 import { authService } from '../features/auth/authService';
+import {
+  createSingleFlight,
+  requireSessionUser,
+  restoreSessionUser,
+} from '../features/auth/authSession';
+import { ApiClientError } from '../services/api';
 
 export interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authError: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<UserResponse>;
   logout: () => Promise<void>;
@@ -18,49 +25,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const initialSessionRequestRef = useRef(createSingleFlight<AuthUser | null>());
+  const authOperationRef = useRef(0);
 
   // Restore authenticated session on initial mount or manual refresh via GET /api/auth/me
   const restoreSession = useCallback(async () => {
+    const operation = ++authOperationRef.current;
+    setIsLoading(true);
+    setAuthError(null);
     try {
-      const currentUser = await authService.getCurrentUser({ silent: true });
-      setUser({
-        id: currentUser.id,
-        username: currentUser.username,
-        email: currentUser.email,
-        fullName: currentUser.fullName,
-      });
-      setIsAuthenticated(true);
-    } catch {
-      // Unauthenticated or expired session is an expected anonymous state
-      setUser(null);
-      setIsAuthenticated(false);
+      const currentUser = await restoreSessionUser(
+        () => authService.getCurrentUser({ silent: true })
+      );
+      if (operation === authOperationRef.current) {
+        setUser(currentUser);
+        setIsAuthenticated(currentUser !== null);
+      }
+    } catch (error) {
+      if (operation === authOperationRef.current) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError(error instanceof ApiClientError
+          ? error.message
+          : 'Unable to verify your session. Please try again.');
+      }
     } finally {
-      setIsLoading(false);
+      if (operation === authOperationRef.current) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     let isMounted = true;
+    const operation = authOperationRef.current;
+    const initialSessionRequest = initialSessionRequestRef.current(
+      () => restoreSessionUser(() => authService.getCurrentUser({ silent: true }))
+    );
 
     const initAuth = async () => {
       try {
-        const currentUser = await authService.getCurrentUser({ silent: true });
-        if (isMounted) {
-          setUser({
-            id: currentUser.id,
-            username: currentUser.username,
-            email: currentUser.email,
-            fullName: currentUser.fullName,
-          });
-          setIsAuthenticated(true);
+        const currentUser = await initialSessionRequest;
+        if (isMounted && operation === authOperationRef.current) {
+          setUser(currentUser);
+          setIsAuthenticated(currentUser !== null);
+          setAuthError(null);
         }
-      } catch {
-        if (isMounted) {
+      } catch (error) {
+        if (isMounted && operation === authOperationRef.current) {
           setUser(null);
           setIsAuthenticated(false);
+          setAuthError(error instanceof ApiClientError
+            ? error.message
+            : 'Unable to verify your session. Please try again.');
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && operation === authOperationRef.current) {
           setIsLoading(false);
         }
       }
@@ -74,45 +93,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: LoginCredentials) => {
+    const operation = ++authOperationRef.current;
     setIsLoading(true);
+    setAuthError(null);
     try {
-      const loginResponse = await authService.login(credentials);
-      try {
-        // Attempt to fetch full user profile using newly established session
-        const currentUser = await authService.getCurrentUser();
-        setUser({
-          id: currentUser.id,
-          username: currentUser.username,
-          email: currentUser.email,
-          fullName: currentUser.fullName,
-        });
-      } catch {
-        // Fallback to username from login response
-        setUser({ username: loginResponse.username });
-      }
+      await authService.login(credentials);
+      const currentUser = await requireSessionUser(() => authService.getCurrentUser());
+      if (operation !== authOperationRef.current) return;
+      setUser(currentUser);
       setIsAuthenticated(true);
+    } catch (error) {
+      if (operation === authOperationRef.current) {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+      throw error;
     } finally {
-      setIsLoading(false);
+      if (operation === authOperationRef.current) setIsLoading(false);
     }
   };
 
   const register = async (credentials: RegisterCredentials): Promise<UserResponse> => {
+    const operation = ++authOperationRef.current;
     setIsLoading(true);
     try {
       return await authService.register(credentials);
     } finally {
-      setIsLoading(false);
+      if (operation === authOperationRef.current) setIsLoading(false);
     }
   };
 
   const logout = async () => {
+    const operation = ++authOperationRef.current;
     setIsLoading(true);
     try {
       await authService.logout();
     } finally {
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsLoading(false);
+      if (operation === authOperationRef.current) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError(null);
+        setIsLoading(false);
+      }
     }
   };
 
@@ -122,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         isAuthenticated,
         isLoading,
+        authError,
         login,
         register,
         logout,

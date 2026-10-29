@@ -43,12 +43,7 @@ export interface Institution {
   updatedAt: string;
 }
 
-export type MembershipRole = 
-  | 'INSTITUTION_ADMIN'
-  | 'RESOURCE_OWNER'
-  | 'TRAINER'
-  | 'MEMBER'
-  | 'BORROWER';
+export type MembershipRole = 'ADMIN' | 'MEMBER' | 'BORROWER';
 
 export type MembershipStatus = 
   | 'PENDING'

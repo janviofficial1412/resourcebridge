@@ -111,7 +111,9 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<Booking> getMyBookings(BookingStatus status, String currentUsername) {
         AppUser user = getAuthenticatedUser(currentUsername);
-        return bookingRepository.findByRequesterUserIdAndStatusWithDetails(user.getId(), status);
+        return bookingRepository.findByRequesterUserIdAndStatusWithDetails(user.getId(), status).stream()
+                .filter(booking -> isActive(booking.getRequesterMembership()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -121,10 +123,12 @@ public class BookingService {
         Booking booking = bookingRepository.findByIdWithDetails(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException("Booking not found with ID: " + bookingId));
 
-        boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId());
-        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId());
+        boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId())
+                && isActive(booking.getRequesterMembership());
+        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId())
+                && isActive(booking.getResource().getOwnerMembership());
         boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
-                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()) && "INSTITUTION_ADMIN".equalsIgnoreCase(m.getRole()))
+                .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                 .isPresent();
 
         if (!isRequester && !isOwner && !isAdmin) {
@@ -140,7 +144,7 @@ public class BookingService {
 
         if (institutionId != null) {
             boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institutionId)
-                    .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()) && "INSTITUTION_ADMIN".equalsIgnoreCase(m.getRole()))
+                    .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                     .isPresent();
 
             if (!isAdmin) {
@@ -149,7 +153,9 @@ public class BookingService {
             return bookingRepository.findIncomingByInstitutionIdAndStatusWithDetails(institutionId, status);
         }
 
-        return bookingRepository.findIncomingByOwnerUserIdAndStatusWithDetails(user.getId(), status);
+        return bookingRepository.findIncomingByOwnerUserIdAndStatusWithDetails(user.getId(), status).stream()
+                .filter(booking -> isActive(booking.getResource().getOwnerMembership()))
+                .toList();
     }
 
     @Transactional
@@ -216,10 +222,12 @@ public class BookingService {
         Booking booking = bookingRepository.findByIdWithDetails(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException("Booking not found with ID: " + bookingId));
 
-        boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId());
-        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId());
+        boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId())
+                && isActive(booking.getRequesterMembership());
+        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId())
+                && isActive(booking.getResource().getOwnerMembership());
         boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
-                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()) && "INSTITUTION_ADMIN".equalsIgnoreCase(m.getRole()))
+                .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                 .isPresent();
 
         if (!isRequester && !isOwner && !isAdmin) {
@@ -262,15 +270,25 @@ public class BookingService {
     }
 
     private Membership verifyCanDecideBooking(AppUser user, Booking booking) {
-        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId());
-        if (isOwner) {
-            return membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
-                    .orElse(booking.getResource().getOwnerMembership());
-        }
+        Membership ownerMembership = booking.getResource().getOwnerMembership();
+        boolean isOwner = ownerMembership.getUser().getId().equals(user.getId());
+        Membership membership = membershipRepository
+                .findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
+                .filter(BookingService::isActive)
+                .orElseThrow(() -> new BookingAccessDeniedException(
+                        "An active membership in this institution is required"));
 
-        return membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
-                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()) && "INSTITUTION_ADMIN".equalsIgnoreCase(m.getRole()))
-                .orElseThrow(() -> new BookingAccessDeniedException("You do not have permission to decide this booking"));
+        if (isOwner && ownerMembership.getId().equals(membership.getId())) {
+            return membership;
+        }
+        if ("ADMIN".equalsIgnoreCase(membership.getRole())) {
+            return membership;
+        }
+        throw new BookingAccessDeniedException("You do not have permission to decide this booking");
+    }
+
+    private static boolean isActive(Membership membership) {
+        return "ACTIVE".equalsIgnoreCase(membership.getStatus());
     }
 
     private AppUser getAuthenticatedUser(String username) {

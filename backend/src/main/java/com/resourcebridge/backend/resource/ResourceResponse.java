@@ -20,9 +20,14 @@ public record ResourceResponse(
         boolean requiresApproval,
         Integer maxBookingMinutes,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        UUID imageId
 ) {
     public static ResourceResponse from(Resource resource) {
+        return from(resource, null);
+    }
+
+    public static ResourceResponse from(Resource resource, UUID imageId) {
         UUID institutionId = resource.getInstitution() != null ? resource.getInstitution().getId() : null;
         String institutionName = resource.getInstitution() != null ? resource.getInstitution().getName() : null;
         UUID ownerMembershipId = resource.getOwnerMembership() != null ? resource.getOwnerMembership().getId() : null;
@@ -50,7 +55,8 @@ public record ResourceResponse(
                 resource.isRequiresApproval(),
                 resource.getMaxBookingMinutes(),
                 resource.getCreatedAt(),
-                resource.getUpdatedAt()
+                resource.getUpdatedAt(),
+                imageId
         );
     }
 }

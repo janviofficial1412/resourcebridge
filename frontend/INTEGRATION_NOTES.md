@@ -160,7 +160,7 @@ The Flyway migration (`V1__initial_schema.sql`) defines rich domain tables that 
 | :--- | :--- | :--- | :--- |
 | `app_user` | `id`, `email`, `password_hash`, `full_name`, `enabled`, `created_at`, `updated_at` | `RegistrationController`, `AuthController` | Fully integrated for Register & Login. **Missing:** `GET /api/auth/me`. |
 | `institution` | `id`, `name`, `slug`, `timezone`, `status` (`ACTIVE`/`SUSPENDED`) | **None** | Needs controller & service. |
-| `membership` | `id`, `user_id`, `institution_id`, `role` (`INSTITUTION_ADMIN`, `RESOURCE_OWNER`, `TRAINER`, `MEMBER`, `BORROWER`), `status` (`PENDING`, `ACTIVE`, `SUSPENDED`, `REJECTED`) | **None** | Needs membership controller & service. |
+| `membership` | `id`, `user_id`, `institution_id`, `role` (`ADMIN`, `MEMBER`, `BORROWER`), `status` (`PENDING`, `ACTIVE`, `SUSPENDED`, `REJECTED`) | Institution APIs | Active membership status gates institution access; roles are institution-scoped. |
 | `resource_category` | `id`, `institution_id`, `name`, `description` | **None** | Needs category controller & service. |
 | `resource` | `id`, `institution_id`, `owner_membership_id`, `category_id`, `name`, `description`, `resource_type` (`EQUIPMENT`/`SPACE`), `condition_rating`, `status`, `requires_approval`, `max_booking_minutes` | **None** | Needs resource CRUD controller & service. |
 | `audit_log` | `id`, `institution_id`, `actor_user_id`, `action`, `entity_type`, `entity_id`, `details`, `occurred_at` | **None** | Append-only database table. |
@@ -258,6 +258,26 @@ To facilitate future backend implementation without breaking frontend code, the 
 * If absent, sends a lightweight probe to trigger Spring Security's `CsrfCookieFilter`.
 * Attaches `X-XSRF-TOKEN: <token>` to all mutating HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`).
 * Passes `credentials: "include"` on every request so Tomcat / Spring Security receives and manages the `JSESSIONID` session cookie.
+
+## Phase 7.4 — Local AI resource matching
+
+* **Endpoint:** `POST /api/resources/match` (authenticated, session and CSRF protected).
+* **Frontend service:** `resourceService.matchResources` posts the natural-language request together
+  with the currently selected institution, keyword, category, type, and condition filters.
+* **Optional booking window:** The discovery UI can send both `startTime` and `endTime` as
+  ISO-8601 instants. The backend filters active booking conflicts and maximum booking duration;
+  without both values it explicitly does not guarantee a free booking slot.
+* **Eligibility:** The backend delegates institution scoping and AVAILABLE status to the existing
+  discovery service, then excludes inactive resource-owner memberships, self-booking, and
+  incompatible duration or requested-time conflicts before the local model receives candidate data.
+* **Ranking:** Ollama defaults to `http://localhost:11434` and `qwen2.5:3b`; environment overrides
+  are `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_CONNECT_TIMEOUT`, and
+  `OLLAMA_RESPONSE_TIMEOUT`. Only loopback URLs are accepted and system proxies are bypassed. The
+  model returns candidate IDs and verbatim evidence snippets only.
+  The backend validates IDs and evidence and constructs the explanation from the validated snippet.
+* **Fallback:** Ollama connection/timeouts and invalid output produce deterministic keyword-ranked
+  matches, marked `DETERMINISTIC`. Regular discovery remains available if Ollama is offline.
+  Location text is not geocoded, so the interface does not claim physical proximity.
 
 ### 8.3. Known Limitations Caused by Missing `GET /api/auth/me`
 * The backend currently returns only `{ "email": "<user>" }` upon successful login and does **not** expose a current-user endpoint (`/api/auth/me`).
@@ -374,9 +394,11 @@ To facilitate future backend implementation without breaking frontend code, the 
 * **Creation (`POST /api/institutions`):**
   * Input: `{ "name": "...", "slug": "...", "timezone": "..." }`
   * Validates lowercase hyphenated slug (`^[a-z0-9]+(-[a-z0-9]+)*$`).
-  * **Atomicity:** Creation of `Institution` and initial `Membership` with role `INSTITUTION_ADMIN` and status `ACTIVE` (`verifiedAt = now()`) runs in a single `@Transactional` method.
+  * **Atomicity:** Creation of `Institution` and initial `Membership` with role `ADMIN` and status `ACTIVE` (`verifiedAt = now()`) runs in a single `@Transactional` method.
 * **Listing (`GET /api/institutions`):**
-  * Lists all institutions where the authenticated user holds an active membership.
+  * Lists only institutions where the authenticated user has an active membership.
+* **Application access:** Discovery, resources, and booking routes require at least one active institution membership. Authenticated users without memberships can use the dashboard, profile, and institution creation screen; joining an existing institution is not yet implemented. Guests cannot access discovery.
+* **Roles:** `ADMIN` manages categories and has institution-level booking administration. `MEMBER` retains normal sharing and booking permissions. `BORROWER` remains restricted from resource and category creation. Legacy roles are normalized by Flyway V4; resource ownership remains attached to its membership record.
 * **Details (`GET /api/institutions/{id}`):**
   * Enforces institution boundaries: throws 403 Forbidden if the requesting user does not hold an active membership in the requested institution.
   * Returns metadata, member count, and user's role.
@@ -412,6 +434,44 @@ To facilitate future backend implementation without breaking frontend code, the 
 * **Cookie SameSite Configuration:** Configured `server.servlet.session.cookie.same-site=lax` in `application.properties` to guarantee cross-port cookie preservation on modern browsers.
 * **CSRF Token Endpoint:** Added `GET /api/auth/csrf` (permitted and exempt from CSRF) to allow headless CSRF cookie hydration if required prior to mutating requests.
 
+---
 
+## 12. Current local-AI workflows and incident reports
 
+This section reflects the current implementation and supersedes earlier notes describing incident
+reporting as absent.
 
+### Resource matching
+* `POST /api/resources/match` remains authenticated and institution-scoped. Candidate eligibility,
+  active membership, availability, self-booking, duration, and optional booking-window checks are
+  enforced before local AI ranking.
+* If Ollama is unavailable or returns invalid ranking data, deterministic keyword ranking is used.
+  When no lexical match can be established, eligible candidates may be presented as explicitly
+  **unranked fallback suggestions**; they are not represented as relevance-confirmed matches.
+* The frontend submits the latest requirements from the form and does not treat an asynchronous
+  discovery-search debounce update as a new matching request.
+
+### Incident reports
+* `POST /api/institutions/{institutionId}/incidents` creates a report for an active institution
+  member. Report text is limited to 10,000 characters.
+* `GET /api/incidents/{incidentId}` and
+  `POST /api/incidents/{incidentId}/summary` require the report author or an active institution
+  administrator. The service checks the caller's active membership in the report's institution;
+  pending, inactive, and cross-institution memberships are denied.
+* Reports are stored in `incident_report` by Flyway migration V6. The original report is
+  non-updatable through JPA. Generated summaries are transient, use the configured local Ollama
+  model/endpoint, and are not persisted.
+* Summary output contains six structured fields and is labeled as an AI-generated draft requiring
+  human review. Model errors and malformed output return a retryable service error; tests use
+  mocked Ollama HTTP responses.
+* Automated evaluation examples live in
+  `backend/src/test/resources/evaluation/incident-summarization-cases.json`. They validate explicit
+  versus missing delay/evidence and attributed conflicting claims, including an embedded-instruction
+  example. These are deterministic parser/evaluation checks, not model training or a guarantee that
+  every generated claim is factually correct.
+
+### Feedback and verification
+There is no dedicated human-feedback or AI-correction persistence workflow. If corrections are
+collected later, use an opt-in, institution-authorized, append-only reviewed record and treat
+feedback as an evaluation candidate rather than ground truth. Do not send private incident content
+to external services.

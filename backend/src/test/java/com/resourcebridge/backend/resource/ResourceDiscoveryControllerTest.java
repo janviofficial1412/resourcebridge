@@ -1,6 +1,7 @@
 package com.resourcebridge.backend.resource;
 
 import com.resourcebridge.backend.ApiExceptionHandler;
+import com.resourcebridge.backend.image.ImageAssetService;
 import com.resourcebridge.backend.identity.AppUser;
 import com.resourcebridge.backend.institution.Institution;
 import com.resourcebridge.backend.institution.Membership;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +42,9 @@ class ResourceDiscoveryControllerTest {
     @Mock
     private ResourceService resourceService;
 
+    @Mock
+    private ImageAssetService imageAssetService;
+
     private MockMvc mockMvc;
 
     private UUID institutionId;
@@ -55,7 +60,8 @@ class ResourceDiscoveryControllerTest {
 
     @BeforeEach
     void setUp() {
-        ResourceController controller = new ResourceController(resourceService);
+        ResourceController controller = new ResourceController(resourceService, imageAssetService);
+        lenient().when(imageAssetService.getResourceImageIds(any())).thenReturn(java.util.Map.of());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
@@ -71,7 +77,7 @@ class ResourceDiscoveryControllerTest {
         testInstitution = new Institution("Apex Nanotech Lab", "apex-nano", "UTC");
         ReflectionTestUtils.setField(testInstitution, "id", institutionId);
 
-        testMembership = new Membership(testUser, testInstitution, "RESOURCE_OWNER", "ACTIVE", Instant.now());
+        testMembership = new Membership(testUser, testInstitution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(testMembership, "id", UUID.randomUUID());
 
         testCategory = new ResourceCategory(testInstitution, "Microscopy", "High-res scopes");
@@ -281,6 +287,17 @@ class ResourceDiscoveryControllerTest {
                         .param("categoryId", categoryId.toString())
                         .param("resourceType", "EQUIPMENT")
                         .param("conditionRating", "NEW")
+                        .principal(new TestingAuthenticationToken("alice", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void institutionFilterIsOptionalForAllActiveInstitutionDiscovery() throws Exception {
+        when(resourceService.discoverResources(isNull(), isNull(), isNull(), isNull(), isNull(), eq("alice")))
+                .thenReturn(List.of(availableResource));
+
+        mockMvc.perform(get("/api/resources")
                         .principal(new TestingAuthenticationToken("alice", null)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));

@@ -8,18 +8,31 @@ import {
 
 export const institutionService = {
   /**
-   * Lists all institutions where the authenticated user holds membership.
+   * Lists institutions where the authenticated user has an active membership.
    */
   async listMyInstitutions(): Promise<InstitutionSummary[]> {
     return api.get<InstitutionSummary[]>('/api/institutions');
   },
 
   /**
-   * Creates a new institution and automatically assigns the creator as initial INSTITUTION_ADMIN.
+   * Creates a new institution and assigns the creator as its initial ADMIN.
    * Mutating call requiring X-XSRF-TOKEN CSRF verification.
    */
   async createInstitution(data: CreateInstitutionRequest): Promise<InstitutionDetail> {
     return api.post<InstitutionDetail>('/api/institutions', data);
+  },
+
+  async uploadInstitutionLogo(institutionId: string, file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append('file', file);
+    await api.post<void>(
+      `/api/institutions/${encodeURIComponent(institutionId)}/logo`,
+      formData
+    );
+  },
+
+  async removeInstitutionLogo(institutionId: string): Promise<void> {
+    return api.delete<void>(`/api/institutions/${encodeURIComponent(institutionId)}/logo`);
   },
 
   /**

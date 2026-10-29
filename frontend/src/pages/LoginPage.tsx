@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { ApiClientError } from '../services/api';
+import { SessionEstablishmentError } from '../features/auth/authSession';
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -38,7 +39,9 @@ export const LoginPage: React.FC = () => {
       await login({ username: trimmedUsername, password });
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      if (err instanceof ApiClientError) {
+      if (err instanceof SessionEstablishmentError) {
+        setGeneralError(err.message);
+      } else if (err instanceof ApiClientError) {
         if (err.status === 401) {
           setGeneralError('Invalid username or password. Please verify your credentials.');
         } else if (err.status === 403) {
@@ -46,6 +49,8 @@ export const LoginPage: React.FC = () => {
         } else {
           setGeneralError(err.message || 'An unexpected error occurred during login.');
         }
+      } else if (err instanceof Error) {
+        setGeneralError(err.message);
       } else {
         setGeneralError('Unable to connect to the authentication service. Please check your connection.');
       }

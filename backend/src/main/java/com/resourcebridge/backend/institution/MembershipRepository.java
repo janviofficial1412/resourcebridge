@@ -10,13 +10,17 @@ import java.util.UUID;
 
 public interface MembershipRepository extends JpaRepository<Membership, UUID> {
 
-    @Query("SELECT m FROM Membership m JOIN FETCH m.institution WHERE m.user.id = :userId")
-    List<Membership> findByUserIdWithInstitution(@Param("userId") UUID userId);
+    @Query("SELECT m FROM Membership m JOIN FETCH m.institution " +
+            "WHERE m.user.id = :userId AND m.status = 'ACTIVE'")
+    List<Membership> findActiveByUserIdWithInstitution(@Param("userId") UUID userId);
 
     @Query("SELECT m FROM Membership m JOIN FETCH m.user WHERE m.institution.id = :institutionId")
     List<Membership> findByInstitutionIdWithUser(@Param("institutionId") UUID institutionId);
 
     Optional<Membership> findByUser_IdAndInstitution_Id(UUID userId, UUID institutionId);
+
+    @Query("SELECT m.institution.id FROM Membership m WHERE m.user.id = :userId AND m.status = 'ACTIVE'")
+    List<UUID> findActiveInstitutionIdsByUserId(@Param("userId") UUID userId);
 
     boolean existsByUser_IdAndInstitution_Id(UUID userId, UUID institutionId);
 

@@ -3,8 +3,13 @@ package com.resourcebridge.backend;
 import com.resourcebridge.backend.identity.RegistrationService;
 import com.resourcebridge.backend.institution.InstitutionService;
 import com.resourcebridge.backend.booking.BookingService;
+import com.resourcebridge.backend.image.ImageAssetService;
+import com.resourcebridge.backend.image.ImageContentValidator;
 import com.resourcebridge.backend.resource.ResourceCategoryService;
 import com.resourcebridge.backend.resource.ResourceService;
+import com.resourcebridge.backend.resource.matching.ResourceMatchService;
+import com.resourcebridge.backend.incident.IncidentReportService;
+import com.resourcebridge.backend.incident.IncidentSummarizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +72,34 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
     }
 
+    @ExceptionHandler(ResourceMatchService.MatchValidationException.class)
+    public ResponseEntity<ApiError> handleResourceMatchValidation(ResourceMatchService.MatchValidationException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(IncidentReportService.IncidentNotFoundException.class)
+    public ResponseEntity<ApiError> handleIncidentNotFound(IncidentReportService.IncidentNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(IncidentReportService.IncidentAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleIncidentAccessDenied(
+            IncidentReportService.IncidentAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(IncidentReportService.IncidentValidationException.class)
+    public ResponseEntity<ApiError> handleIncidentValidation(
+            IncidentReportService.IncidentValidationException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(IncidentSummarizationService.IncidentSummarizationUnavailableException.class)
+    public ResponseEntity<ApiError> handleIncidentSummarizationUnavailable(
+            IncidentSummarizationService.IncidentSummarizationUnavailableException e) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), List.of());
+    }
+
     @ExceptionHandler(ResourceCategoryService.DuplicateCategoryException.class)
     public ResponseEntity<ApiError> handleDuplicateCategory(ResourceCategoryService.DuplicateCategoryException e) {
         return build(HttpStatus.CONFLICT, e.getMessage(), List.of());
@@ -95,6 +128,31 @@ public class ApiExceptionHandler {
     @ExceptionHandler(BookingService.BookingConflictException.class)
     public ResponseEntity<ApiError> handleBookingConflict(BookingService.BookingConflictException e) {
         return build(HttpStatus.CONFLICT, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ImageAssetService.ImageNotFoundException.class)
+    public ResponseEntity<ApiError> handleImageNotFound(ImageAssetService.ImageNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ImageAssetService.ImageAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleImageAccessDenied(ImageAssetService.ImageAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ImageContentValidator.InvalidImageException.class)
+    public ResponseEntity<ApiError> handleInvalidImage(ImageContentValidator.InvalidImageException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(ImageAssetService.ImageStorageException.class)
+    public ResponseEntity<ApiError> handleImageStorageFailure() {
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Image storage operation failed", List.of());
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleUploadTooLarge() {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "Image must be no larger than 5 MB", List.of());
     }
 
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)

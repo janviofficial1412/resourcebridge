@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { resourceService } from '../features/resources/resourceService';
 import { ResourceResponse } from '../features/resources/resourceTypes';
+import { ResourcePhoto } from '../features/resources/ResourcePhoto';
 import { institutionService } from '../features/institutions/institutionService';
 import { InstitutionSummary } from '../features/institutions/institutionTypes';
 import { ResourceFormModal } from '../features/resources/ResourceFormModal';
@@ -32,6 +33,7 @@ export const MyResourcesPage: React.FC = () => {
   const [resources, setResources] = useState<ResourceResponse[]>([]);
   const [institutions, setInstitutions] = useState<InstitutionSummary[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('');
+  const canCreateResource = institutions.some((institution) => institution.role !== 'BORROWER');
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -186,14 +188,16 @@ export const MyResourcesPage: React.FC = () => {
           >
             Refresh
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleOpenCreateModal}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Share New Resource
-          </Button>
+          {canCreateResource && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleOpenCreateModal}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Share New Resource
+            </Button>
+          )}
         </div>
       </div>
 
@@ -246,11 +250,13 @@ export const MyResourcesPage: React.FC = () => {
         ) : (
           <EmptyState
             icon={<Briefcase className="h-7 w-7 text-brand-600" />}
-            title="No Resources Registered Yet"
+            title={canCreateResource ? 'No Resources Registered Yet' : 'Resource registration is restricted'}
             badgeText="Ready for Sharing"
-            description="You have not registered any equipment or research spaces for sharing. Click below to publish your first instrument to the campus directory."
-            actionLabel="Register First Resource"
-            onAction={handleOpenCreateModal}
+            description={canCreateResource
+              ? 'You have not registered any equipment or research spaces for sharing. Click below to publish your first instrument to the campus directory.'
+              : 'Your active institution memberships do not permit resource registration.'}
+            actionLabel={canCreateResource ? 'Register First Resource' : undefined}
+            onAction={canCreateResource ? handleOpenCreateModal : undefined}
           />
         )
       ) : (
@@ -261,6 +267,11 @@ export const MyResourcesPage: React.FC = () => {
               className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
             >
               <div className="space-y-3">
+                <ResourcePhoto
+                  imageId={res.imageId}
+                  alt={`${res.name} photo`}
+                  className="h-40 w-full rounded-xl object-cover"
+                />
                 {/* Badges row */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -355,7 +366,9 @@ export const MyResourcesPage: React.FC = () => {
         }}
         onSuccess={handleResourceFormSuccess}
         resourceToEdit={resourceToEdit}
-        institutions={institutions}
+        institutions={resourceToEdit
+          ? institutions
+          : institutions.filter((institution) => institution.role !== 'BORROWER')}
       />
 
       <DeleteResourceModal

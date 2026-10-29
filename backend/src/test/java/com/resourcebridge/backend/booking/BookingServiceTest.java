@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -101,10 +102,10 @@ class BookingServiceTest {
         requesterMembership = new Membership(requesterUser, institution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(requesterMembership, "id", UUID.randomUUID());
 
-        ownerMembership = new Membership(ownerUser, institution, "RESOURCE_OWNER", "ACTIVE", Instant.now());
+        ownerMembership = new Membership(ownerUser, institution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(ownerMembership, "id", UUID.randomUUID());
 
-        adminMembership = new Membership(adminUser, institution, "INSTITUTION_ADMIN", "ACTIVE", Instant.now());
+        adminMembership = new Membership(adminUser, institution, "ADMIN", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(adminMembership, "id", UUID.randomUUID());
 
         category = new ResourceCategory(institution, "Microscopy", "EM scopes");
@@ -454,6 +455,18 @@ class BookingServiceTest {
         );
     }
 
+    @Test
+    void administratorRoleInAnotherInstitutionDoesNotGrantBookingAccess() {
+        Membership adminElsewhere = new Membership(strangerUser, otherInstitution, "ADMIN", "ACTIVE", Instant.now());
+        when(appUserRepository.findByUsername("stranger")).thenReturn(Optional.of(strangerUser));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(strangerUser.getId(), institution.getId()))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.getIncomingBookings(null, institution.getId(), "stranger"));
+        assertNotEquals(adminElsewhere.getInstitution().getId(), institution.getId());
+    }
+
     // -------------------------------------------------------------------------
     // 3. Approve booking tests
     // -------------------------------------------------------------------------
@@ -564,6 +577,26 @@ class BookingServiceTest {
                 BookingService.BookingAccessDeniedException.class,
                 () -> bookingService.approveBooking(bookingId, null, "bob_requester")
         );
+    }
+
+    @Test
+    void inactiveResourceOwnerCannotApproveBooking() {
+        UUID bookingId = UUID.randomUUID();
+        Membership inactiveOwner = new Membership(ownerUser, institution, "MEMBER", "SUSPENDED", null);
+        ReflectionTestUtils.setField(inactiveOwner, "id", ownerMembership.getId());
+        Resource inactiveOwnerResource = new Resource(
+                institution, inactiveOwner, category, "Unavailable owner", ResourceType.EQUIPMENT);
+        Booking booking = new Booking(institution, inactiveOwnerResource, requesterMembership,
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), null);
+        ReflectionTestUtils.setField(booking, "id", bookingId);
+
+        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(inactiveOwner));
+
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.approveBooking(bookingId, null, "alice_owner"));
     }
 
     // -------------------------------------------------------------------------
@@ -688,5 +721,23 @@ class BookingServiceTest {
                 BookingService.BookingAccessDeniedException.class,
                 () -> bookingService.cancelBooking(bookingId, "stranger")
         );
+    }
+
+    @Test
+    void inactiveBookingRequesterCannotCancelBooking() {
+        UUID bookingId = UUID.randomUUID();
+        Membership inactiveRequester = new Membership(requesterUser, institution, "MEMBER", "REJECTED", null);
+        ReflectionTestUtils.setField(inactiveRequester, "id", requesterMembership.getId());
+        Booking booking = new Booking(institution, approvalRequiredResource, inactiveRequester,
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), null);
+        ReflectionTestUtils.setField(booking, "id", bookingId);
+
+        when(appUserRepository.findByUsername("bob_requester")).thenReturn(Optional.of(requesterUser));
+        when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(requesterUser.getId(), institution.getId()))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.cancelBooking(bookingId, "bob_requester"));
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Compass,
@@ -14,10 +14,18 @@ import {
   User,
   Lock,
   ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { resourceService } from '../features/resources/resourceService';
-import { ResourceResponse, ResourceType, ConditionRating } from '../features/resources/resourceTypes';
+import { isResourceMatchResponse, readSubmittedMatchRequest } from '../features/resources/resourceMatching';
+import { ResourcePhoto } from '../features/resources/ResourcePhoto';
+import {
+  ResourceResponse,
+  ResourceType,
+  ConditionRating,
+  ResourceMatchResponse,
+} from '../features/resources/resourceTypes';
 import { CategoryResponse } from '../features/resources/resourceTypes';
 import { institutionService } from '../features/institutions/institutionService';
 import { InstitutionSummary } from '../features/institutions/institutionTypes';
@@ -73,6 +81,11 @@ function ResourceCard({ resource }: { resource: ResourceResponse }) {
   return (
     <article className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
       <div className="space-y-3">
+        <ResourcePhoto
+          imageId={resource.imageId}
+          alt={`${resource.name} photo`}
+          className="h-40 w-full rounded-xl object-cover"
+        />
         {/* Badges */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -149,6 +162,17 @@ function ResourceCard({ resource }: { resource: ResourceResponse }) {
   );
 }
 
+function ResourceMatchCard({ match }: { match: ResourceMatchResponse['matches'][number] }) {
+  return (
+    <div className="space-y-2">
+      <p className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-xs leading-relaxed text-brand-900">
+        {match.explanation}
+      </p>
+      <ResourceCard resource={match.resource} />
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export const DiscoverPage: React.FC = () => {
@@ -165,16 +189,27 @@ export const DiscoverPage: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedResourceType, setSelectedResourceType] = useState<ResourceType | ''>('');
   const [selectedCondition, setSelectedCondition] = useState<ConditionRating | ''>('');
+  const [matchingRequest, setMatchingRequest] = useState('');
+  const [bookingStart, setBookingStart] = useState('');
+  const [bookingEnd, setBookingEnd] = useState('');
 
   // Results state
   const [resources, setResources] = useState<ResourceResponse[]>([]);
+  const [matchResponse, setMatchResponse] = useState<ResourceMatchResponse | null>(null);
+  const [isMatching, setIsMatching] = useState(false);
+  const [matchingError, setMatchingError] = useState<string | null>(null);
   const [isLoadingInstitutions, setIsLoadingInstitutions] = useState(false);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   // Track in-flight fetch to prevent stale response overwrite
   const fetchSeqRef = useRef(0);
+  const categorySeqRef = useRef(0);
+  const matchSeqRef = useRef(0);
+  const matchAbortRef = useRef<AbortController | null>(null);
+  const matchInFlightRef = useRef(false);
 
   // ── Debounce search input (400 ms) ──────────────────────────────────────────
   useEffect(() => {
@@ -192,10 +227,6 @@ export const DiscoverPage: React.FC = () => {
       .then((data) => {
         const active = data.filter((i) => i.membershipStatus === 'ACTIVE');
         setInstitutions(active);
-        // Auto-select single institution
-        if (active.length === 1) {
-          setSelectedInstitutionId(active[0].id);
-        }
       })
       .catch(() => {
         // Non-fatal — user can still see the selector empty
@@ -203,30 +234,76 @@ export const DiscoverPage: React.FC = () => {
       .finally(() => setIsLoadingInstitutions(false));
   }, [isAuthenticated]);
 
-  // ── Load categories when institution changes ─────────────────────────────────
+  // Invalidate requests before a stale response can commit after any filter change.
+  useLayoutEffect(() => {
+    fetchSeqRef.current += 1;
+    setIsLoadingResources(true);
+    return () => {
+      fetchSeqRef.current += 1;
+    };
+  }, [
+    selectedInstitutionId,
+    searchInput,
+    debouncedSearch,
+    selectedCategoryId,
+    selectedResourceType,
+    selectedCondition,
+  ]);
+
+  // ── Load categories for all active institutions or the selected institution ──
   useEffect(() => {
-    setSelectedCategoryId('');
+    const seq = ++categorySeqRef.current;
+    const institutionIds = selectedInstitutionId
+      ? [selectedInstitutionId]
+      : institutions.map((institution) => institution.id);
+
     setCategories([]);
-    if (!selectedInstitutionId) return;
+    setCategoryError(null);
+    if (institutionIds.length === 0) {
+      setSelectedCategoryId('');
+      setIsLoadingCategories(false);
+      return;
+    }
+
     setIsLoadingCategories(true);
-    resourceService.getCategories(selectedInstitutionId)
-      .then(setCategories)
-      .catch(() => setCategories([]))
-      .finally(() => setIsLoadingCategories(false));
-  }, [selectedInstitutionId]);
+    Promise.all(institutionIds.map((id) => resourceService.getCategories(id)))
+      .then((categoryLists) => {
+        if (seq !== categorySeqRef.current) return;
+        const availableCategories = categoryLists.flat();
+        setCategories(availableCategories);
+        setSelectedCategoryId((current) =>
+          current && availableCategories.some((category) => category.id === current)
+            ? current
+            : ''
+        );
+      })
+      .catch((err: unknown) => {
+        if (seq !== categorySeqRef.current) return;
+        setCategories([]);
+        setCategoryError(err instanceof ApiClientError
+          ? err.message
+          : 'Unable to load categories for this institution.');
+        setSelectedCategoryId('');
+      })
+      .finally(() => {
+        if (seq === categorySeqRef.current) setIsLoadingCategories(false);
+      });
+  }, [institutions, selectedInstitutionId]);
 
   // ── Fetch discoverable resources ─────────────────────────────────────────────
   const fetchResources = useCallback(async () => {
-    if (!selectedInstitutionId) {
+    const seq = ++fetchSeqRef.current;
+    if (authLoading || !isAuthenticated) {
       setResources([]);
+      setIsLoadingResources(false);
       return;
     }
-    const seq = ++fetchSeqRef.current;
+
     setIsLoadingResources(true);
     setError(null);
     try {
       const data = await resourceService.discoverResources({
-        institutionId: selectedInstitutionId,
+        institutionId: selectedInstitutionId || undefined,
         search: debouncedSearch || undefined,
         categoryId: selectedCategoryId || undefined,
         resourceType: selectedResourceType || undefined,
@@ -248,14 +325,107 @@ export const DiscoverPage: React.FC = () => {
         setIsLoadingResources(false);
       }
     }
-  }, [selectedInstitutionId, debouncedSearch, selectedCategoryId, selectedResourceType, selectedCondition]);
+  }, [
+    authLoading,
+    isAuthenticated,
+    selectedInstitutionId,
+    debouncedSearch,
+    selectedCategoryId,
+    selectedResourceType,
+    selectedCondition,
+  ]);
+
+  const resetMatchingResults = () => {
+    matchSeqRef.current += 1;
+    matchAbortRef.current?.abort();
+    matchAbortRef.current = null;
+    matchInFlightRef.current = false;
+    setMatchResponse(null);
+    setMatchingError(null);
+    setIsMatching(false);
+  };
 
   useEffect(() => {
     fetchResources();
   }, [fetchResources]);
 
+  // The debounced keyword is derived from searchInput; its delayed update must not cancel a match.
+  useEffect(() => {
+    resetMatchingResults();
+  }, [
+    selectedInstitutionId,
+    searchInput,
+    selectedCategoryId,
+    selectedResourceType,
+    selectedCondition,
+  ]);
+
+  const runResourceMatch = async (requestText: string) => {
+    if (matchInFlightRef.current) return;
+    setMatchingError(null);
+
+    if (Boolean(bookingStart) !== Boolean(bookingEnd)) {
+      setMatchingError('Choose both a booking start and end time, or leave both blank.');
+      return;
+    }
+
+    if (!requestText || requestText.length > 1000) {
+      setMatchingError('Describe what you need in 1,000 characters or fewer.');
+      return;
+    }
+
+    const seq = ++matchSeqRef.current;
+    const controller = new AbortController();
+    matchAbortRef.current = controller;
+    matchInFlightRef.current = true;
+    setIsMatching(true);
+    setMatchResponse(null);
+    try {
+      const response = await resourceService.matchResources({
+        request: requestText,
+        search: searchInput.trim() || undefined,
+        institutionId: selectedInstitutionId || undefined,
+        categoryId: selectedCategoryId || undefined,
+        resourceType: selectedResourceType || undefined,
+        conditionRating: selectedCondition || undefined,
+        startTime: bookingStart ? new Date(bookingStart).toISOString() : undefined,
+        endTime: bookingEnd ? new Date(bookingEnd).toISOString() : undefined,
+      }, controller.signal);
+      if (!isResourceMatchResponse(response)) {
+        throw new Error('The matching service returned an invalid response. Please try again.');
+      }
+      if (seq === matchSeqRef.current) setMatchResponse(response);
+    } catch (err) {
+      if (seq !== matchSeqRef.current) return;
+      setMatchingError(err instanceof ApiClientError
+        ? err.isAuthError
+          ? 'Your session has expired. Sign in again before matching resources.'
+          : err.status === 403
+            ? 'You are not authorized to match resources for this institution.'
+            : err.status >= 500
+              ? 'The matching service is temporarily unavailable. Please try again.'
+              : err.message
+        : err instanceof Error
+          ? err.message
+          : 'Unable to match resources right now. Please try again.');
+    } finally {
+      if (seq === matchSeqRef.current) {
+        matchInFlightRef.current = false;
+        matchAbortRef.current = null;
+        setIsMatching(false);
+      }
+    }
+  };
+
+  const handleResourceMatch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const requestText = readSubmittedMatchRequest(new FormData(event.currentTarget));
+    void runResourceMatch(requestText);
+  };
+
   // ── Clear all filters ────────────────────────────────────────────────────────
   const handleClearFilters = () => {
+    setSelectedInstitutionId('');
     setSearchInput('');
     setDebouncedSearch('');
     setSelectedCategoryId('');
@@ -264,6 +434,7 @@ export const DiscoverPage: React.FC = () => {
   };
 
   const hasActiveFilters =
+    selectedInstitutionId !== '' ||
     searchInput !== '' ||
     selectedCategoryId !== '' ||
     selectedResourceType !== '' ||
@@ -330,7 +501,7 @@ export const DiscoverPage: React.FC = () => {
           variant="secondary"
           size="sm"
           onClick={fetchResources}
-          disabled={isLoadingResources || !selectedInstitutionId}
+          disabled={isLoadingResources}
           leftIcon={<RefreshCw className={`h-4 w-4 ${isLoadingResources ? 'animate-spin' : ''}`} aria-hidden />}
         >
           Refresh
@@ -358,7 +529,7 @@ export const DiscoverPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
           <div className="flex-1 min-w-0">
             <label htmlFor="discover-institution" className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Institution <span className="text-rose-500">*</span>
+              Institution
             </label>
             {isLoadingInstitutions ? (
               <div className="flex items-center gap-2 text-xs text-slate-400 h-[34px]">
@@ -373,27 +544,51 @@ export const DiscoverPage: React.FC = () => {
                 </Link>
               </p>
             ) : (
-              <select
-                id="discover-institution"
-                value={selectedInstitutionId}
-                onChange={(e) => setSelectedInstitutionId(e.target.value)}
-                className="w-full text-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                {institutions.length > 1 && (
-                  <option value="">— Select an institution —</option>
-                )}
-                {institutions.map((inst) => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.name}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  id="discover-institution"
+                  value={selectedInstitutionId}
+                  onChange={(e) => {
+                    const institutionId = e.target.value;
+                    setSelectedInstitutionId(institutionId);
+                    if (institutionId && selectedCategoryId) {
+                      const category = categories.find((item) => item.id === selectedCategoryId);
+                      if (!category || category.institutionId !== institutionId) {
+                        setSelectedCategoryId('');
+                      }
+                    }
+                  }}
+                  className="w-full text-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">All active institutions</option>
+                  {institutions.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedInstitutionId && (() => {
+                  const selectedInstitution = institutions.find(
+                    (institution) => institution.id === selectedInstitutionId
+                  );
+                  return selectedInstitution && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                      <ResourcePhoto
+                        imageId={selectedInstitution.logoId}
+                        alt={`${selectedInstitution.name} logo`}
+                        className="h-8 w-8 rounded object-cover border border-slate-200"
+                      />
+                      <span>{selectedInstitution.name}</span>
+                    </div>
+                  );
+                })()}
+              </>
             )}
           </div>
         </div>
 
-        {/* Row 2: Search + filters (shown once institution is selected) */}
-        {selectedInstitutionId && (
+        {/* Search and filters apply across all active institutions by default. */}
+        {institutions.length > 0 && (
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search */}
             <div className="flex-1 relative">
@@ -435,11 +630,17 @@ export const DiscoverPage: React.FC = () => {
                 aria-label="Filter by category"
               >
                 <option value="">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
+                {categories.map((cat) => {
+                  const institutionName = institutions.find((item) => item.id === cat.institutionId)?.name;
+                  const label = selectedInstitutionId || !institutionName
+                    ? cat.name
+                    : `${cat.name} — ${institutionName}`;
+                  return (
+                    <option key={cat.id} value={cat.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -482,15 +683,150 @@ export const DiscoverPage: React.FC = () => {
             </div>
           </div>
         )}
+        {categoryError && (
+          <p role="alert" className="text-xs text-rose-600">{categoryError}</p>
+        )}
       </div>
 
+      {/* Natural-language matching */}
+      {institutions.length > 0 && (
+        <form
+          onSubmit={handleResourceMatch}
+          className="rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-4 shadow-xs space-y-3"
+        >
+          <div className="flex items-start gap-2">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Describe what you need</h2>
+              <p className="mt-0.5 text-xs text-slate-600">
+                Local AI ranks eligible resources from your active institutions. Existing filters still apply.
+              </p>
+            </div>
+          </div>
+          <label htmlFor="resource-match-request" className="sr-only">
+            Describe the resource you are looking for
+          </label>
+          <textarea
+            id="resource-match-request"
+            name="request"
+            value={matchingRequest}
+            onChange={(event) => {
+              setMatchingRequest(event.target.value);
+              resetMatchingResults();
+            }}
+            maxLength={1000}
+            rows={2}
+            placeholder="For example: I need a laptop for Python development for three days."
+            className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="match-booking-start" className="mb-1 block text-xs font-medium text-slate-700">
+                Booking starts (optional)
+              </label>
+              <input
+                id="match-booking-start"
+                type="datetime-local"
+                value={bookingStart}
+                onChange={(event) => {
+                  setBookingStart(event.target.value);
+                  resetMatchingResults();
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="match-booking-end" className="mb-1 block text-xs font-medium text-slate-700">
+                Booking ends (optional)
+              </label>
+              <input
+                id="match-booking-end"
+                type="datetime-local"
+                value={bookingEnd}
+                onChange={(event) => {
+                  setBookingEnd(event.target.value);
+                  resetMatchingResults();
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-slate-500">
+              Without a time window, current booking conflicts cannot be confirmed.
+            </p>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!matchingRequest.trim() || isMatching || matchInFlightRef.current}
+              leftIcon={isMatching
+                ? <Loader size="sm" label="" />
+                : <Sparkles className="h-4 w-4" aria-hidden />}
+            >
+              {isMatching ? 'Finding matches…' : 'Find matches'}
+            </Button>
+          </div>
+          {matchingError && (
+            <p role="alert" className="text-xs text-rose-600">{matchingError}</p>
+          )}
+        </form>
+      )}
+
       {/* Results area */}
-      {!selectedInstitutionId ? (
+      {institutions.length === 0 && isLoadingInstitutions ? (
+        <div className="py-20 flex justify-center">
+          <Loader size="lg" label="Loading your institutions…" />
+        </div>
+      ) : institutions.length === 0 ? (
         <EmptyState
           icon={<Building2 className="h-6 w-6 text-brand-600" />}
-          title="Select an Institution"
-          description="Choose one of your active institutional memberships above to browse its available resources."
+          title="No Active Institutions"
+          description="Join an institution with an active membership to discover its available resources."
         />
+      ) : isMatching ? (
+        <div className="py-16 flex flex-col items-center justify-center gap-3" aria-live="polite">
+          <Loader size="lg" />
+          <p className="text-xs text-slate-500 font-medium">Checking eligibility and ranking matches locally…</p>
+        </div>
+      ) : matchingError ? (
+        <ErrorState
+          title="Unable to Match Resources"
+          message={matchingError}
+          onRetry={() => void runResourceMatch(matchingRequest.trim())}
+        />
+      ) : matchResponse ? (
+        matchResponse.matches.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles className="h-6 w-6 text-brand-600" />}
+            title="No Strong Matches"
+            description={matchResponse.message}
+          />
+        ) : (
+          <>
+            <div role="status" className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-semibold text-slate-800">
+                {matchResponse.rankingMethod === 'AI' ? 'Locally AI-ranked matches' : 'Fallback suggestions'}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">{matchResponse.message}</p>
+              <button
+                type="button"
+                onClick={() => setMatchResponse(null)}
+                className="mt-2 text-xs font-medium text-brand-700 hover:text-brand-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+              >
+                Back to discovery results
+              </button>
+            </div>
+            <div
+              className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
+              aria-label={`${matchResponse.matches.length} matched resources`}
+              aria-live="polite"
+            >
+              {matchResponse.matches.map((match) => (
+                <ResourceMatchCard key={match.resource.id} match={match} />
+              ))}
+            </div>
+          </>
+        )
       ) : isLoadingResources ? (
         <div className="py-20 flex flex-col items-center justify-center gap-4">
           <Loader size="lg" />
@@ -509,7 +845,7 @@ export const DiscoverPage: React.FC = () => {
           description={
             hasActiveFilters
               ? 'Try adjusting or clearing your filters to see more results.'
-              : 'This institution has no available resources at the moment. Check back later or try another institution.'
+              : 'Your active institutions have no available resources at the moment. Check back later.'
           }
           {...(hasActiveFilters
             ? { actionLabel: 'Clear Filters', onAction: handleClearFilters }

@@ -110,9 +110,12 @@ abstract class AbstractDatabaseTest {
     }
 
     UUID insertUser(String email) {
+        String username = "test_" + UUID.randomUUID().toString().replace("-", "");
+
         return jdbc.queryForObject(
-                "INSERT INTO app_user (email, password_hash, full_name) VALUES (?, 'test-only-hash', 'Test User') RETURNING id",
-                UUID.class, email);
+                "INSERT INTO app_user (username, email, password_hash, full_name) " +
+                        "VALUES (?, ?, 'test-only-hash', 'Test User') RETURNING id",
+                UUID.class, username, email);
     }
 
     UUID insertMembership(UUID userId, UUID institutionId, String role) {
@@ -145,7 +148,7 @@ abstract class AbstractDatabaseTest {
     Tenant createTenant(String slug) {
         UUID institution = insertInstitution(slug);
         UUID user = insertUser(slug + "-owner@example.com");
-        UUID owner = insertActiveMembership(user, institution, "RESOURCE_OWNER");
+        UUID owner = insertActiveMembership(user, institution, "MEMBER");
         UUID category = insertCategory(institution, "General");
         return new Tenant(institution, owner, category);
     }

@@ -12,6 +12,7 @@ public record InstitutionDetailResponse(
         String role,
         String membershipStatus,
         long memberCount,
-        Instant createdAt
+        Instant createdAt,
+        UUID logoId
 ) {
 }

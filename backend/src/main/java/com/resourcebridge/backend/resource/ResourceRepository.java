@@ -51,17 +51,16 @@ public interface ResourceRepository extends JpaRepository<Resource, UUID> {
     List<Resource> findByInstitutionIdAndOwnerUserIdWithDetails(@Param("institutionId") UUID institutionId, @Param("userId") UUID userId);
 
     /**
-     * Discovery query: returns AVAILABLE resources in an institution, with optional
-     * search (name/description), category, type, and condition filters.
-     * All optional parameters are nullable; a null value means "no filter applied".
-     * Uses JOIN FETCH to avoid N+1 queries on institution, category, and owner/user.
+     * Discovery query: AVAILABLE status is mandatory; the supplied institution IDs
+     * are already restricted to the caller's active memberships.
      */
     @Query("SELECT r FROM Resource r " +
             "JOIN FETCH r.institution i " +
             "JOIN FETCH r.category c " +
             "JOIN FETCH r.ownerMembership m " +
             "JOIN FETCH m.user u " +
-            "WHERE r.institution.id = :institutionId " +
+            "WHERE r.institution.id IN :activeInstitutionIds " +
+            "AND (:institutionId IS NULL OR r.institution.id = :institutionId) " +
             "AND r.status = com.resourcebridge.backend.resource.ResourceStatus.AVAILABLE " +
             "AND (CAST(:search AS string) IS NULL " +
             "     OR LOWER(r.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
@@ -72,6 +71,7 @@ public interface ResourceRepository extends JpaRepository<Resource, UUID> {
             "ORDER BY r.name ASC")
     List<Resource> findDiscoverable(
             @Param("institutionId") UUID institutionId,
+            @Param("activeInstitutionIds") List<UUID> activeInstitutionIds,
             @Param("search") String search,
             @Param("categoryId") UUID categoryId,
             @Param("resourceType") ResourceType resourceType,

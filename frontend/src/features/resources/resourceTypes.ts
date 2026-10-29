@@ -43,6 +43,28 @@ export interface ResourceResponse {
   maxBookingMinutes?: number | null;
   createdAt: string;
   updatedAt: string;
+  imageId?: string | null;
+}
+
+export interface ResourceMatchRequest {
+  request: string;
+  search?: string;
+  institutionId?: string;
+  categoryId?: string;
+  resourceType?: ResourceType;
+  conditionRating?: ConditionRating;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ResourceMatchResponse {
+  rankingMethod: 'AI' | 'DETERMINISTIC';
+  bookingWindowChecked: boolean;
+  message: string;
+  matches: Array<{
+    resource: ResourceResponse;
+    explanation: string;
+  }>;
 }
 
 export interface CreateResourceRequest {

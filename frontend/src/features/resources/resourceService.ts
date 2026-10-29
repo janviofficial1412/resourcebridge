@@ -7,10 +7,12 @@ import {
   CreateCategoryRequest,
   ResourceType,
   ConditionRating,
+  ResourceMatchRequest,
+  ResourceMatchResponse,
 } from './resourceTypes';
 
 export interface DiscoverResourcesParams {
-  institutionId: string;
+  institutionId?: string;
   search?: string;
   categoryId?: string;
   resourceType?: ResourceType;
@@ -30,12 +32,14 @@ export const resourceService = {
   },
 
   /**
-   * Discovers AVAILABLE resources in the given institution visible to active members.
-   * All filter params except institutionId are optional and omitted when empty.
+   * Discovers AVAILABLE resources in the caller's active institutions.
+   * An institution may optionally narrow the results.
    */
   async discoverResources(params: DiscoverResourcesParams): Promise<ResourceResponse[]> {
     const query = new URLSearchParams();
-    query.set('institutionId', params.institutionId);
+    if (params.institutionId) {
+      query.set('institutionId', params.institutionId);
+    }
     if (params.search && params.search.trim()) {
       query.set('search', params.search.trim());
     }
@@ -51,6 +55,10 @@ export const resourceService = {
     return api.get<ResourceResponse[]>(`/api/resources?${query.toString()}`);
   },
 
+  async matchResources(request: ResourceMatchRequest, signal?: AbortSignal): Promise<ResourceMatchResponse> {
+    return api.post<ResourceMatchResponse>('/api/resources/match', request, { signal });
+  },
+
   /**
    * Retrieves full details for a single resource.
    */
@@ -63,6 +71,19 @@ export const resourceService = {
    */
   async createResource(data: CreateResourceRequest): Promise<ResourceResponse> {
     return api.post<ResourceResponse>('/api/resources', data);
+  },
+
+  async uploadResourceImage(resourceId: string, file: File): Promise<{ id: string; url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<{ id: string; url: string }>(
+      `/api/resources/${encodeURIComponent(resourceId)}/image`,
+      formData
+    );
+  },
+
+  async removeResourceImage(resourceId: string): Promise<void> {
+    return api.delete<void>(`/api/resources/${encodeURIComponent(resourceId)}/image`);
   },
 
   /**

@@ -79,7 +79,7 @@ class BookingControllerTest {
         requesterMembership = new Membership(requesterUser, testInstitution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(requesterMembership, "id", UUID.randomUUID());
 
-        ownerMembership = new Membership(ownerUser, testInstitution, "RESOURCE_OWNER", "ACTIVE", Instant.now());
+        ownerMembership = new Membership(ownerUser, testInstitution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(ownerMembership, "id", UUID.randomUUID());
 
         testCategory = new ResourceCategory(testInstitution, "Microscopy", "EM scopes");

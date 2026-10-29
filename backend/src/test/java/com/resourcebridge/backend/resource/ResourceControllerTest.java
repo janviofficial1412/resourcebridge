@@ -1,6 +1,7 @@
 package com.resourcebridge.backend.resource;
 
 import com.resourcebridge.backend.ApiExceptionHandler;
+import com.resourcebridge.backend.image.ImageAssetService;
 import com.resourcebridge.backend.identity.AppUser;
 import com.resourcebridge.backend.institution.Institution;
 import com.resourcebridge.backend.institution.Membership;
@@ -21,11 +22,13 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -39,6 +42,9 @@ class ResourceControllerTest {
 
     @Mock
     private ResourceService resourceService;
+
+    @Mock
+    private ImageAssetService imageAssetService;
 
     private MockMvc mockMvc;
 
@@ -54,7 +60,8 @@ class ResourceControllerTest {
 
     @BeforeEach
     void setUp() {
-        ResourceController controller = new ResourceController(resourceService);
+        ResourceController controller = new ResourceController(resourceService, imageAssetService);
+        lenient().when(imageAssetService.getResourceImageIds(any())).thenReturn(java.util.Map.of());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
@@ -69,7 +76,7 @@ class ResourceControllerTest {
         testInstitution = new Institution("Apex Nanotech Lab", "apex-nano", "UTC");
         ReflectionTestUtils.setField(testInstitution, "id", institutionId);
 
-        testMembership = new Membership(testUser, testInstitution, "RESOURCE_OWNER", "ACTIVE", Instant.now());
+        testMembership = new Membership(testUser, testInstitution, "MEMBER", "ACTIVE", Instant.now());
         ReflectionTestUtils.setField(testMembership, "id", UUID.randomUUID());
 
         testCategory = new ResourceCategory(testInstitution, "Electron Microscopy", "High-res microscopes");
@@ -192,7 +199,20 @@ class ResourceControllerTest {
                         .principal(new TestingAuthenticationToken("scholar_jane", null)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(resourceId.toString())))
-                .andExpect(jsonPath("$.name", is("Titan Krios Cryo-EM")));
+                .andExpect(jsonPath("$.name", is("Titan Krios Cryo-EM")))
+                .andExpect(jsonPath("$.imageId", nullValue()));
+    }
+
+    @Test
+    void resourceResponseIncludesImageIdWhenPhotoExists() throws Exception {
+        UUID imageId = UUID.randomUUID();
+        when(resourceService.getResourceDetails(resourceId, "scholar_jane")).thenReturn(sampleResource);
+        when(imageAssetService.getResourceImageIds(any())).thenReturn(java.util.Map.of(resourceId, imageId));
+
+        mockMvc.perform(get("/api/resources/{id}", resourceId)
+                        .principal(new TestingAuthenticationToken("scholar_jane", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageId", is(imageId.toString())));
     }
 
     @Test

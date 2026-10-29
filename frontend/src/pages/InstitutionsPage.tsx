@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { institutionService } from '../features/institutions/institutionService';
 import { InstitutionSummary } from '../features/institutions/institutionTypes';
+import { ResourcePhoto } from '../features/resources/ResourcePhoto';
+import { validateImageFile } from '../features/images/validateImageFile';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -29,6 +31,10 @@ export const InstitutionsPage: React.FC = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [timezone, setTimezone] = useState('UTC');
+  const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [createdInstitutionId, setCreatedInstitutionId] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -53,6 +59,16 @@ export const InstitutionsPage: React.FC = () => {
     fetchInstitutions();
   }, [fetchInstitutions]);
 
+  useEffect(() => {
+    if (!showCreateModal || !selectedLogo) {
+      setLogoPreviewUrl(null);
+      return;
+    }
+    const preview = URL.createObjectURL(selectedLogo);
+    setLogoPreviewUrl(preview);
+    return () => URL.revokeObjectURL(preview);
+  }, [showCreateModal, selectedLogo]);
+
   // Auto-generate slug from name
   const handleNameChange = (val: string) => {
     setName(val);
@@ -70,6 +86,18 @@ export const InstitutionsPage: React.FC = () => {
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+  };
+
+  const finishInstitutionCreation = async () => {
+    setShowCreateModal(false);
+    setCreatedInstitutionId(null);
+    setSelectedLogo(null);
+    setLogoError(null);
+    setName('');
+    setSlug('');
+    setTimezone('UTC');
+    setFormErrors({});
+    await fetchInstitutions();
   };
 
   const validateForm = (): boolean => {
@@ -95,25 +123,43 @@ export const InstitutionsPage: React.FC = () => {
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (logoError) return;
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+    let activeInstitutionId = createdInstitutionId;
     try {
-      await institutionService.createInstitution({
-        name: name.trim(),
-        slug: slug.trim().toLowerCase(),
-        timezone: timezone.trim() || 'UTC',
-      });
+      if (!activeInstitutionId) {
+        const created = await institutionService.createInstitution({
+          name: name.trim(),
+          slug: slug.trim().toLowerCase(),
+          timezone: timezone.trim() || 'UTC',
+        });
+        activeInstitutionId = created.id;
+        setCreatedInstitutionId(activeInstitutionId);
+      }
+
+      if (selectedLogo) {
+        await institutionService.uploadInstitutionLogo(activeInstitutionId, selectedLogo);
+      }
 
       setShowCreateModal(false);
       setName('');
       setSlug('');
       setTimezone('UTC');
+      setSelectedLogo(null);
+      setLogoError(null);
+      setCreatedInstitutionId(null);
       setFormErrors({});
       await fetchInstitutions();
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        if (err.status === 409) {
+        if (activeInstitutionId) {
+          setFormErrors((prev) => ({
+            ...prev,
+            general: `Institution created, but the logo could not be uploaded. Retry to upload the logo without creating a duplicate. ${err.message}`,
+          }));
+        } else if (err.status === 409) {
           setFormErrors((prev) => ({
             ...prev,
             slug: 'An institution with this slug already exists. Please choose another.',
@@ -133,7 +179,9 @@ export const InstitutionsPage: React.FC = () => {
       } else {
         setFormErrors((prev) => ({
           ...prev,
-          general: 'Network error. Please try again.',
+          general: activeInstitutionId
+            ? 'Institution created, but logo upload failed. Retry to upload the logo without creating a duplicate.'
+            : 'Network error. Please try again.',
         }));
       }
     } finally {
@@ -155,7 +203,7 @@ export const InstitutionsPage: React.FC = () => {
             Partner Institutions
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-            Universities, research consortia, and laboratories participating in the ResourceBridge verified network.
+            Universities, research consortia, and laboratories using ResourceBridge to coordinate resource sharing.
           </p>
         </div>
 
@@ -195,7 +243,7 @@ export const InstitutionsPage: React.FC = () => {
           icon={<Building2 className="h-7 w-7 text-indigo-600" />}
           title="No Institutions Found"
           badgeText="Active Membership Required"
-          description="You are not currently an active member of any institution. Create a new institution to become its administrator, or join an existing campus directory."
+          description="You are not currently an active member of any institution. Create an institution to become its administrator. Joining existing institutions is not available yet."
           actionLabel="Create Your First Institution"
           onAction={() => setShowCreateModal(true)}
         />
@@ -208,9 +256,11 @@ export const InstitutionsPage: React.FC = () => {
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
-                    <Building2 className="h-5 w-5" />
-                  </div>
+                  <ResourcePhoto
+                    imageId={inst.logoId}
+                    alt={`${inst.name} logo`}
+                    className="h-14 w-14 rounded-lg object-cover border border-indigo-100"
+                  />
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                       {inst.role}
@@ -282,7 +332,13 @@ export const InstitutionsPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  if (createdInstitutionId) {
+                    void finishInstitutionCreation();
+                  } else {
+                    setShowCreateModal(false);
+                  }
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
                 aria-label="Close dialog"
               >
@@ -337,12 +393,77 @@ export const InstitutionsPage: React.FC = () => {
                 helperText="Standard IANA timezone identifier (defaults to UTC)."
               />
 
+              <div className="space-y-2">
+                <label htmlFor="institution-logo" className="block text-xs font-semibold text-slate-700">
+                  Institution Logo <span className="font-normal text-slate-500">(optional, JPEG/PNG/WebP up to 5 MB)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200">
+                    {logoPreviewUrl ? (
+                      <img src={logoPreviewUrl} alt="Institution logo preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <ResourcePhoto alt="No institution logo selected" className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <input
+                      id="institution-logo"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        const validationError = validateImageFile(file, 'logo');
+                        if (validationError) {
+                          setLogoError(validationError);
+                          event.target.value = '';
+                        } else {
+                          setSelectedLogo(file);
+                          setLogoError(null);
+                        }
+                      }}
+                      className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+                    />
+                    {selectedLogo && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedLogo(null);
+                          setLogoError(null);
+                        }}
+                        className="text-xs font-medium text-rose-600 hover:text-rose-700"
+                      >
+                        Remove selected logo
+                      </button>
+                    )}
+                    {logoError && <p role="alert" className="text-xs text-rose-600">{logoError}</p>}
+                    <p className="text-[11px] text-slate-500">A logo does not verify an institution's identity.</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-2 flex items-center justify-end gap-3">
+                {createdInstitutionId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="md"
+                    onClick={() => void finishInstitutionCreation()}
+                  >
+                    Finish without logo
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="secondary"
                   size="md"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    if (createdInstitutionId) {
+                      void finishInstitutionCreation();
+                    } else {
+                      setShowCreateModal(false);
+                    }
+                  }}
                 >
                   Cancel
                 </Button>
@@ -352,7 +473,7 @@ export const InstitutionsPage: React.FC = () => {
                   size="md"
                   isLoading={isSubmitting}
                 >
-                  Create & Initialize
+                  {createdInstitutionId ? 'Retry Logo Upload' : 'Create & Initialize'}
                 </Button>
               </div>
             </form>

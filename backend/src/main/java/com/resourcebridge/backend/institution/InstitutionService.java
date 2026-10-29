@@ -67,7 +67,7 @@ public class InstitutionService {
         Membership adminMembership = new Membership(
                 user,
                 savedInstitution,
-                "INSTITUTION_ADMIN",
+                "ADMIN",
                 "ACTIVE",
                 Instant.now()
         );
@@ -83,7 +83,8 @@ public class InstitutionService {
                 adminMembership.getRole(),
                 adminMembership.getStatus(),
                 1L,
-                savedInstitution.getCreatedAt()
+                savedInstitution.getCreatedAt(),
+                null
         );
     }
 
@@ -91,11 +92,13 @@ public class InstitutionService {
     public List<InstitutionSummaryResponse> listMyInstitutions(String currentUsername) {
         AppUser user = getAuthenticatedUser(currentUsername);
 
-        List<Membership> memberships = membershipRepository.findByUserIdWithInstitution(user.getId());
+        List<Membership> memberships = membershipRepository.findActiveByUserIdWithInstitution(user.getId());
 
         Map<UUID, InstitutionSummaryResponse> deduplicated = new LinkedHashMap<>();
         for (Membership membership : memberships) {
-            if (membership == null || membership.getInstitution() == null) {
+            if (membership == null
+                    || membership.getInstitution() == null
+                    || !"ACTIVE".equalsIgnoreCase(membership.getStatus())) {
                 continue;
             }
 
@@ -108,7 +111,8 @@ public class InstitutionService {
                     institution.getStatus(),
                     membership.getRole(),
                     membership.getStatus(),
-                    institution.getCreatedAt()
+                    institution.getCreatedAt(),
+                    null
             ));
         }
 
@@ -138,7 +142,8 @@ public class InstitutionService {
                 membership.getRole(),
                 membership.getStatus(),
                 memberCount,
-                institution.getCreatedAt()
+                institution.getCreatedAt(),
+                null
         );
     }
 

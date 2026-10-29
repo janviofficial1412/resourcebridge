@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { resourceService } from '../features/resources/resourceService';
+import { ResourcePhoto } from '../features/resources/ResourcePhoto';
 import { ResourceResponse, ResourceType, ConditionRating, ResourceStatus } from '../features/resources/resourceTypes';
 import { bookingService } from '../features/bookings/bookingService';
 import { BookingResponse } from '../features/bookings/bookingTypes';
@@ -319,6 +320,11 @@ export const ResourceDetailPage: React.FC = () => {
 
       {/* Header card */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <ResourcePhoto
+          imageId={resource.imageId}
+          alt={`${resource.name} photo`}
+          className="mb-6 max-h-[28rem] min-h-48 w-full rounded-xl object-cover"
+        />
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             {/* Type + condition badges */}

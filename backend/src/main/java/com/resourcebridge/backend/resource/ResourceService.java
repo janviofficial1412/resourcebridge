@@ -99,13 +99,19 @@ public class ResourceService {
                 command.maxBookingMinutes()
         );
 
-        return resourceRepository.saveAndFlush(resource);
-    }
+        Resource savedResource = resourceRepository.saveAndFlush(resource);
 
+        return resourceRepository.findByIdWithDetails(savedResource.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Resource not found with ID: " + savedResource.getId()));
+
+    }
     @Transactional(readOnly = true)
     public List<Resource> getMyResources(String currentUsername) {
         AppUser user = getAuthenticatedUser(currentUsername);
-        return resourceRepository.findByOwnerUserIdWithDetails(user.getId());
+        return resourceRepository.findByOwnerUserIdWithDetails(user.getId()).stream()
+                .filter(resource -> "ACTIVE".equalsIgnoreCase(resource.getOwnerMembership().getStatus()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -209,10 +215,11 @@ public class ResourceService {
     }
 
     /**
-     * Discovers AVAILABLE resources in the given institution.
-     * The caller must be an ACTIVE member of the institution.
+     * Discovers AVAILABLE resources across the caller's active institutions,
+     * optionally narrowed to one institution.
      * All filter parameters are optional (null = no filter applied).
-     * When categoryId is provided it must belong to the same institution.
+     * When categoryId is provided it must belong to an institution the caller
+     * can access and, when selected, to the selected institution.
      */
     @Transactional(readOnly = true)
     public List<Resource> discoverResources(UUID institutionId,
@@ -221,26 +228,37 @@ public class ResourceService {
                                             ResourceType resourceType,
                                             ConditionRating conditionRating,
                                             String currentUsername) {
-        if (institutionId == null) {
-            throw new ResourceValidationException("institutionId query parameter is required");
+        AppUser user = getAuthenticatedUser(currentUsername);
+        List<UUID> activeInstitutionIds;
+        if (institutionId != null) {
+            verifyActiveMembership(user.getId(), institutionId);
+            activeInstitutionIds = List.of(institutionId);
+        } else {
+            activeInstitutionIds = membershipRepository.findActiveInstitutionIdsByUserId(user.getId());
         }
 
-        AppUser user = getAuthenticatedUser(currentUsername);
-        verifyActiveMembership(user.getId(), institutionId);
+        if (activeInstitutionIds.isEmpty()) {
+            return List.of();
+        }
 
         if (categoryId != null) {
             ResourceCategory category = resourceCategoryRepository.findById(categoryId)
                     .orElseThrow(() -> new ResourceCategoryService.ResourceCategoryNotFoundException(
                             "Category not found with ID: " + categoryId));
-            if (!category.getInstitution().getId().equals(institutionId)) {
+            UUID categoryInstitutionId = category.getInstitution().getId();
+            if (institutionId != null && !categoryInstitutionId.equals(institutionId)) {
                 throw new ResourceValidationException(
                         "Category does not belong to institution " + institutionId);
+            }
+            if (!activeInstitutionIds.contains(categoryInstitutionId)) {
+                throw new ResourceAccessDeniedException("You do not have access to this category's institution");
             }
         }
 
         String trimmedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
 
-        return resourceRepository.findDiscoverable(institutionId, trimmedSearch, categoryId, resourceType, conditionRating);
+        return resourceRepository.findDiscoverable(
+                institutionId, activeInstitutionIds, trimmedSearch, categoryId, resourceType, conditionRating);
     }
 
     @Transactional(readOnly = true)
@@ -277,16 +295,15 @@ public class ResourceService {
     }
 
     private void verifyCanModifyResource(AppUser user, Resource resource) {
-        boolean isOwner = resource.getOwnerMembership().getUser().getId().equals(user.getId());
-        if (isOwner) {
-            return;
-        }
+        Membership membership = membershipRepository
+                .findByUser_IdAndInstitution_Id(user.getId(), resource.getInstitution().getId())
+                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()))
+                .orElseThrow(() -> new ResourceAccessDeniedException(
+                        "You need an active membership in this institution to modify this resource"));
 
-        boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), resource.getInstitution().getId())
-                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()) && "INSTITUTION_ADMIN".equalsIgnoreCase(m.getRole()))
-                .isPresent();
-
-        if (!isAdmin) {
+        boolean isOwner = resource.getOwnerMembership().getId().equals(membership.getId());
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(membership.getRole());
+        if (!isOwner && !isAdmin) {
             throw new ResourceAccessDeniedException("You do not have permission to modify or delete this resource");
         }
     }

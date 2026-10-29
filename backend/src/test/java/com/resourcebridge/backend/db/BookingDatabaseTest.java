@@ -36,7 +36,7 @@ class BookingDatabaseTest extends AbstractDatabaseTest {
         UUID ownerUser = insertUserWithUsername("owner_" + suffix, "owner_" + suffix + "@example.com");
         UUID requesterUser = insertUserWithUsername("req_" + suffix, "req_" + suffix + "@example.com");
 
-        UUID ownerMembership = insertActiveMembership(ownerUser, institution, "RESOURCE_OWNER");
+        UUID ownerMembership = insertActiveMembership(ownerUser, institution, "MEMBER");
         UUID requesterMembership = insertActiveMembership(requesterUser, institution, "MEMBER");
 
         UUID category = insertCategory(institution, "Cat " + suffix);
@@ -48,7 +48,7 @@ class BookingDatabaseTest extends AbstractDatabaseTest {
     private UUID insertBooking(UUID institutionId, UUID resourceId, UUID requesterMembershipId, String start, String end) {
         return jdbc.queryForObject(
                 "INSERT INTO booking (institution_id, resource_id, requester_membership_id, start_time, end_time, status) " +
-                        "VALUES (?, ?, ?, TIMESTAMPTZ ?, TIMESTAMPTZ ?, 'PENDING') RETURNING id",
+                        "VALUES (?, ?, ?, CAST(? AS timestamptz), CAST(? AS timestamptz), 'PENDING') RETURNING id",
                 UUID.class, institutionId, resourceId, requesterMembershipId, start, end);
     }
 

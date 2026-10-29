@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "exact-wording",
+      "query": "I need a laptop for Python development",
+      "expectedResource": "Development laptop"
+    },
+    {
+      "id": "synonym-wording",
+      "query": "I need a portable notebook to write software",
+      "expectedResource": "Development laptop"
+    },
+    {
+      "id": "multiple-requirements",
+      "query": "A laptop suitable for Python programming",
+      "expectedResource": "Development laptop"
+    },
+    {
+      "id": "soft-location-preference",
+      "query": "Python laptop near my institution",
+      "expectedResource": "Development laptop"
+    },
+    {
+      "id": "ambiguous-no-keyword-overlap",
+      "query": "I need something useful for work",
+      "expectedBehavior": "UNRANKED_ELIGIBLE"
+    },
+    {
+      "id": "no-suitable-keyword-match",
+      "query": "woodworking tools",
+      "expectedBehavior": "UNRANKED_ELIGIBLE"
+    }
+  ]
+}
