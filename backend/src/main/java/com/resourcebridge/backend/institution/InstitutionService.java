@@ -10,8 +10,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -91,18 +93,26 @@ public class InstitutionService {
 
         List<Membership> memberships = membershipRepository.findByUserIdWithInstitution(user.getId());
 
-        return memberships.stream()
-                .map(m -> new InstitutionSummaryResponse(
-                        m.getInstitution().getId(),
-                        m.getInstitution().getName(),
-                        m.getInstitution().getSlug(),
-                        m.getInstitution().getTimezone(),
-                        m.getInstitution().getStatus(),
-                        m.getRole(),
-                        m.getStatus(),
-                        m.getInstitution().getCreatedAt()
-                ))
-                .toList();
+        Map<UUID, InstitutionSummaryResponse> deduplicated = new LinkedHashMap<>();
+        for (Membership membership : memberships) {
+            if (membership == null || membership.getInstitution() == null) {
+                continue;
+            }
+
+            Institution institution = membership.getInstitution();
+            deduplicated.putIfAbsent(institution.getId(), new InstitutionSummaryResponse(
+                    institution.getId(),
+                    institution.getName(),
+                    institution.getSlug(),
+                    institution.getTimezone(),
+                    institution.getStatus(),
+                    membership.getRole(),
+                    membership.getStatus(),
+                    institution.getCreatedAt()
+            ));
+        }
+
+        return List.copyOf(deduplicated.values());
     }
 
     @Transactional(readOnly = true)
