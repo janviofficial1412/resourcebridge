@@ -1,78 +1,67 @@
 import React from 'react';
-import { HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
+import { clsx } from 'clsx';
 
 export interface SummaryCardProps {
   title: string;
   value: string | number;
   icon: React.ReactNode;
   description: string;
-  status?: 'active' | 'unavailable' | 'pending';
-  badgeText?: string;
-  helpText?: string;
+  tone?: 'brand' | 'accent' | 'amber' | 'emerald';
+  href?: string;
+  isLoading?: boolean;
   className?: string;
 }
+
+const tones = {
+  brand: 'bg-brand-50 text-brand-700 ring-brand-100',
+  accent: 'bg-accent-50 text-accent-700 ring-accent-100',
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+};
 
 export const SummaryCard: React.FC<SummaryCardProps> = ({
   title,
   value,
   icon,
   description,
-  status = 'pending',
-  badgeText,
-  helpText,
+  tone = 'brand',
+  href,
+  isLoading = false,
   className = '',
 }) => {
-  const getStatusBadge = () => {
-    if (badgeText) {
-      const styles = {
-        active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        unavailable: 'bg-rose-50 text-rose-700 border-rose-200',
-        pending: 'bg-amber-50 text-amber-700 border-amber-200',
-      }[status];
-
-      return (
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${styles}`}
-        >
-          {badgeText}
-        </span>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <div
-      className={`bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-slate-300 transition-colors flex flex-col justify-between ${className}`}
-    >
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            {title}
-          </span>
-          <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-            {icon}
-          </div>
-        </div>
-
-        <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            {value}
-          </span>
-          {getStatusBadge()}
-        </div>
-
-        <p className="text-xs text-slate-500 leading-relaxed mb-4">
-          {description}
-        </p>
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl ring-1', tones[tone])}>{icon}</div>
+        {href && (
+          <ArrowUpRight
+            className="h-4 w-4 text-slate-300 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand-600"
+            aria-hidden
+          />
+        )}
       </div>
-
-      {helpText && (
-        <div className="pt-3 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <HelpCircle className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{helpText}</span>
-        </div>
-      )}
-    </div>
+      <div className="mt-5">
+        <p className="eyebrow">{title}</p>
+        {isLoading ? (
+          <div className="skeleton mt-2 h-8 w-16" aria-hidden />
+        ) : (
+          <p className="mt-1 font-display text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
+        )}
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p>
+      </div>
+    </>
   );
+
+  const classes = clsx('group flex flex-col p-5', href ? 'surface-interactive' : 'surface', className);
+
+  if (href) {
+    return (
+      <Link to={href} className={classes} aria-label={`${title}: ${isLoading ? 'loading' : value}`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={classes}>{body}</div>;
 };
