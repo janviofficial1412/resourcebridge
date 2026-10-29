@@ -28,6 +28,34 @@ public class ResourceController {
         this.resourceService = resourceService;
     }
 
+    // -----------------------------------------------------------------------
+    // Resource discovery  (Phase 6.1)
+    // -----------------------------------------------------------------------
+
+    /**
+     * GET /api/resources?institutionId=&search=&categoryId=&resourceType=&conditionRating=
+     *
+     * Returns AVAILABLE resources in the given institution visible to any ACTIVE member.
+     * All filter params except institutionId are optional.
+     */
+    @GetMapping
+    public List<ResourceResponse> discoverResources(
+            @RequestParam UUID institutionId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) ResourceType resourceType,
+            @RequestParam(required = false) ConditionRating conditionRating,
+            Authentication authentication) {
+        String username = getAuthenticatedUsername(authentication);
+        List<Resource> resources = resourceService.discoverResources(
+                institutionId, search, categoryId, resourceType, conditionRating, username);
+        return resources.stream().map(ResourceResponse::from).toList();
+    }
+
+    // -----------------------------------------------------------------------
+    // My resources (Phase 5)
+    // -----------------------------------------------------------------------
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public ResourceResponse createResource(@Valid @RequestBody CreateResourceRequest request,
@@ -72,6 +100,8 @@ public class ResourceController {
         String username = getAuthenticatedUsername(authentication);
         resourceService.deleteResource(id, username);
     }
+
+    // -----------------------------------------------------------------------
 
     private String getAuthenticatedUsername(Authentication authentication) {
         if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {

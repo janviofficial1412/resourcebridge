@@ -5,7 +5,17 @@ import {
   UpdateResourceRequest,
   CategoryResponse,
   CreateCategoryRequest,
+  ResourceType,
+  ConditionRating,
 } from './resourceTypes';
+
+export interface DiscoverResourcesParams {
+  institutionId: string;
+  search?: string;
+  categoryId?: string;
+  resourceType?: ResourceType;
+  conditionRating?: ConditionRating;
+}
 
 export const resourceService = {
   /**
@@ -17,6 +27,28 @@ export const resourceService = {
       ? `/api/resources/my?institutionId=${encodeURIComponent(institutionId)}`
       : '/api/resources/my';
     return api.get<ResourceResponse[]>(url);
+  },
+
+  /**
+   * Discovers AVAILABLE resources in the given institution visible to active members.
+   * All filter params except institutionId are optional and omitted when empty.
+   */
+  async discoverResources(params: DiscoverResourcesParams): Promise<ResourceResponse[]> {
+    const query = new URLSearchParams();
+    query.set('institutionId', params.institutionId);
+    if (params.search && params.search.trim()) {
+      query.set('search', params.search.trim());
+    }
+    if (params.categoryId) {
+      query.set('categoryId', params.categoryId);
+    }
+    if (params.resourceType) {
+      query.set('resourceType', params.resourceType);
+    }
+    if (params.conditionRating) {
+      query.set('conditionRating', params.conditionRating);
+    }
+    return api.get<ResourceResponse[]>(`/api/resources?${query.toString()}`);
   },
 
   /**

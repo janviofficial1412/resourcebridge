@@ -21,6 +21,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -453,5 +454,307 @@ class ResourceServiceTest {
         assertEquals(2, myResources.size());
         assertEquals("Device 1", myResources.get(0).getName());
         assertEquals("Device 2", myResources.get(1).getName());
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 6.1 – discoverResources service tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    void discoverResourcesReturnsAvailableResourcesForActiveMember() {
+        UUID institutionId = apexLab.getId();
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership)); // ACTIVE
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Cryo-EM Station", ResourceType.EQUIPMENT);
+        available.setStatus(ResourceStatus.AVAILABLE);
+
+        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, null, null, null, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals("Cryo-EM Station", results.get(0).getName());
+        assertEquals(ResourceStatus.AVAILABLE, results.get(0).getStatus());
+    }
+
+    @Test
+    void discoverResourcesRejectsNonMember() {
+        UUID institutionId = apexLab.getId();
+        when(appUserRepository.findByUsername("outsider")).thenReturn(Optional.of(colleagueBob));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(colleagueBob.getId(), institutionId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceService.discoverResources(institutionId, null, null, null, null, "outsider")
+        );
+    }
+
+    @Test
+    void discoverResourcesRejectsInactiveMember() {
+        UUID institutionId = apexLab.getId();
+        Membership inactiveMembership = new Membership(scholarJane, apexLab, "RESOURCE_OWNER", "PENDING", Instant.now());
+        ReflectionTestUtils.setField(inactiveMembership, "id", UUID.randomUUID());
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(inactiveMembership));
+
+        assertThrows(
+                ResourceService.ResourceAccessDeniedException.class,
+                () -> resourceService.discoverResources(institutionId, null, null, null, null, "scholar_jane")
+        );
+    }
+
+    @Test
+    void discoverResourcesRejectsCategoryFromAnotherInstitution() {
+        UUID institutionId = apexLab.getId();
+        UUID foreignCategoryId = UUID.randomUUID();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        // Category belongs to otherLab, not apexLab
+        ResourceCategory foreignCategory = new ResourceCategory(otherLab, "Foreign Cat", "desc");
+        ReflectionTestUtils.setField(foreignCategory, "id", foreignCategoryId);
+        when(resourceCategoryRepository.findById(foreignCategoryId)).thenReturn(Optional.of(foreignCategory));
+
+        assertThrows(
+                ResourceService.ResourceValidationException.class,
+                () -> resourceService.discoverResources(
+                        institutionId, null, foreignCategoryId, null, null, "scholar_jane")
+        );
+    }
+
+    @Test
+    void discoverResourcesForwardsCategoryIdToRepository() {
+        UUID institutionId = apexLab.getId();
+        UUID catId = microscopeCategory.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+        when(resourceCategoryRepository.findById(catId)).thenReturn(Optional.of(microscopeCategory));
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Scope A", ResourceType.EQUIPMENT);
+        available.setStatus(ResourceStatus.AVAILABLE);
+
+        when(resourceRepository.findDiscoverable(institutionId, null, catId, null, null))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, null, catId, null, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals("Scope A", results.get(0).getName());
+    }
+
+    @Test
+    void discoverResourcesForwardsSearchTermToRepository() {
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Cryo-EM", ResourceType.EQUIPMENT);
+        available.setStatus(ResourceStatus.AVAILABLE);
+
+        when(resourceRepository.findDiscoverable(institutionId, "cryo", null, null, null))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, "cryo", null, null, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals("Cryo-EM", results.get(0).getName());
+    }
+
+    @Test
+    void discoverResourcesForwardsResourceTypeToRepository() {
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Lab Space A", ResourceType.SPACE);
+        available.setStatus(ResourceStatus.AVAILABLE);
+
+        when(resourceRepository.findDiscoverable(institutionId, null, null, ResourceType.SPACE, null))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, null, null, ResourceType.SPACE, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals(ResourceType.SPACE, results.get(0).getResourceType());
+    }
+
+    @Test
+    void discoverResourcesForwardsConditionRatingToRepository() {
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Old Equipment", ResourceType.EQUIPMENT);
+        available.setStatus(ResourceStatus.AVAILABLE);
+        available.setConditionRating(ConditionRating.POOR);
+
+        when(resourceRepository.findDiscoverable(institutionId, null, null, null, ConditionRating.POOR))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, null, null, null, ConditionRating.POOR, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals(ConditionRating.POOR, results.get(0).getConditionRating());
+    }
+
+    @Test
+    void discoverResourcesTrimsBlankSearchToNull() {
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+                .thenReturn(List.of());
+
+        // blank search "   " should be treated as no filter
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, "   ", null, null, null, "scholar_jane");
+
+        assertEquals(0, results.size());
+        // Verify repository was called with null search, not the whitespace string
+        org.mockito.Mockito.verify(resourceRepository)
+                .findDiscoverable(institutionId, null, null, null, null);
+    }
+
+    // -----------------------------------------------------------------------
+    // Search normalisation tests – guard for the lower(bytea) PostgreSQL bug
+    //
+    // These tests verify that ResourceService converts null / empty / whitespace
+    // search terms to null before passing them to findDiscoverable(), ensuring the
+    // JPQL CAST(:search AS string) path is always exercised with a consistent type.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void discoverResources_nullSearch_passesNullToRepository() {
+        // Regression guard: a null search must reach the repository as null, not as
+        // an empty string or other value that would cause a lower(bytea) error.
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        Resource available = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Cryo-EM Station", ResourceType.EQUIPMENT);
+        available.setStatus(ResourceStatus.AVAILABLE);
+
+        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+                .thenReturn(List.of(available));
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, null, null, null, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals("Cryo-EM Station", results.get(0).getName());
+
+        // Verify the repository received exactly null – not a blank string or empty string.
+        ArgumentCaptor<String> searchCaptor = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(resourceRepository)
+                .findDiscoverable(
+                        org.mockito.ArgumentMatchers.eq(institutionId),
+                        searchCaptor.capture(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull());
+        assertNull(searchCaptor.getValue(), "null search must be passed as null to the repository");
+    }
+
+    @Test
+    void discoverResources_emptySearch_passesNullToRepository() {
+        // An empty string "" must be treated identically to no search filter – the
+        // service should convert it to null before calling the repository, preventing
+        // the lower(bytea) PostgreSQL error that occurs when LOWER('') is sent as an
+        // untyped parameter.
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        when(resourceRepository.findDiscoverable(institutionId, null, null, null, null))
+                .thenReturn(List.of());
+
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, "", null, null, null, "scholar_jane");
+
+        assertEquals(0, results.size());
+
+        ArgumentCaptor<String> searchCaptor = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(resourceRepository)
+                .findDiscoverable(
+                        org.mockito.ArgumentMatchers.eq(institutionId),
+                        searchCaptor.capture(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull());
+        assertNull(searchCaptor.getValue(), "empty search must be normalised to null");
+    }
+
+    @Test
+    void discoverResources_nonEmptySearchTerm_passedTrimmedToRepository() {
+        // A non-blank search term must reach the repository trimmed. The service must
+        // NOT pass null (which would skip the filter) nor the raw un-trimmed string.
+        UUID institutionId = apexLab.getId();
+
+        when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
+                .thenReturn(Optional.of(janeMembership));
+
+        Resource match = new Resource(apexLab, janeMembership, microscopeCategory,
+                "Cryo-EM Station", ResourceType.EQUIPMENT);
+        match.setStatus(ResourceStatus.AVAILABLE);
+        Resource noMatch = new Resource(apexLab, janeMembership, microscopeCategory,
+                "PCR Thermocycler", ResourceType.EQUIPMENT);
+        noMatch.setStatus(ResourceStatus.AVAILABLE);
+
+        // Repository is stubbed to return only the matching resource for search "cryo"
+        when(resourceRepository.findDiscoverable(institutionId, "cryo", null, null, null))
+                .thenReturn(List.of(match));
+
+        // The frontend may send leading/trailing whitespace; the service must trim it.
+        List<Resource> results = resourceService.discoverResources(
+                institutionId, "  cryo  ", null, null, null, "scholar_jane");
+
+        assertEquals(1, results.size());
+        assertEquals("Cryo-EM Station", results.get(0).getName());
+
+        // Verify repository received the trimmed term, not the whitespace-padded version.
+        ArgumentCaptor<String> searchCaptor = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(resourceRepository)
+                .findDiscoverable(
+                        org.mockito.ArgumentMatchers.eq(institutionId),
+                        searchCaptor.capture(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull());
+        assertEquals("cryo", searchCaptor.getValue(),
+                "non-empty search must be passed trimmed to the repository");
     }
 }

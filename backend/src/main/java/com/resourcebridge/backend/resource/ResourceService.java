@@ -208,6 +208,41 @@ public class ResourceService {
         resourceRepository.flush();
     }
 
+    /**
+     * Discovers AVAILABLE resources in the given institution.
+     * The caller must be an ACTIVE member of the institution.
+     * All filter parameters are optional (null = no filter applied).
+     * When categoryId is provided it must belong to the same institution.
+     */
+    @Transactional(readOnly = true)
+    public List<Resource> discoverResources(UUID institutionId,
+                                            String search,
+                                            UUID categoryId,
+                                            ResourceType resourceType,
+                                            ConditionRating conditionRating,
+                                            String currentUsername) {
+        if (institutionId == null) {
+            throw new ResourceValidationException("institutionId query parameter is required");
+        }
+
+        AppUser user = getAuthenticatedUser(currentUsername);
+        verifyActiveMembership(user.getId(), institutionId);
+
+        if (categoryId != null) {
+            ResourceCategory category = resourceCategoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new ResourceCategoryService.ResourceCategoryNotFoundException(
+                            "Category not found with ID: " + categoryId));
+            if (!category.getInstitution().getId().equals(institutionId)) {
+                throw new ResourceValidationException(
+                        "Category does not belong to institution " + institutionId);
+            }
+        }
+
+        String trimmedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        return resourceRepository.findDiscoverable(institutionId, trimmedSearch, categoryId, resourceType, conditionRating);
+    }
+
     @Transactional(readOnly = true)
     public long countMyResources(String currentUsername) {
         AppUser user = getAuthenticatedUser(currentUsername);

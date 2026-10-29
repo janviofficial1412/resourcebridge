@@ -2,6 +2,7 @@ package com.resourcebridge.backend;
 
 import com.resourcebridge.backend.identity.RegistrationService;
 import com.resourcebridge.backend.institution.InstitutionService;
+import com.resourcebridge.backend.booking.BookingService;
 import com.resourcebridge.backend.resource.ResourceCategoryService;
 import com.resourcebridge.backend.resource.ResourceService;
 import org.springframework.http.HttpStatus;
@@ -76,6 +77,26 @@ public class ApiExceptionHandler {
         return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
     }
 
+    @ExceptionHandler(BookingService.BookingNotFoundException.class)
+    public ResponseEntity<ApiError> handleBookingNotFound(BookingService.BookingNotFoundException e) {
+        return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(BookingService.BookingAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleBookingAccessDenied(BookingService.BookingAccessDeniedException e) {
+        return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(BookingService.BookingValidationException.class)
+    public ResponseEntity<ApiError> handleBookingValidation(BookingService.BookingValidationException e) {
+        return build(HttpStatus.BAD_REQUEST, e.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(BookingService.BookingConflictException.class)
+    public ResponseEntity<ApiError> handleBookingConflict(BookingService.BookingConflictException e) {
+        return build(HttpStatus.CONFLICT, e.getMessage(), List.of());
+    }
+
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
     public ResponseEntity<ApiError> handleAuthenticationException(org.springframework.security.core.AuthenticationException e) {
         return build(HttpStatus.UNAUTHORIZED, e.getMessage(), List.of());
@@ -100,6 +121,18 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleUnreadableBody() {
         return build(HttpStatus.BAD_REQUEST, "Request body is missing or is not valid JSON", List.of());
+    }
+
+    /**
+     * Handles invalid enum / UUID query parameters (e.g. resourceType=INVALID).
+     * Spring throws MethodArgumentTypeMismatchException before the controller is reached.
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        String param = e.getName();
+        String message = "Invalid value for parameter '" + param + "': " + e.getValue();
+        return build(HttpStatus.BAD_REQUEST, message, List.of());
     }
 
     private static ResponseEntity<ApiError> build(HttpStatus status, String message, List<FieldProblem> fieldErrors) {

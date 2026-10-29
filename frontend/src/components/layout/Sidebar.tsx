@@ -10,6 +10,8 @@ import {
   LogOut,
   ShieldCheck,
   ChevronRight,
+  CalendarCheck,
+  Inbox,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
@@ -58,6 +60,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
       label: 'Discover Resources',
       path: '/discover',
       icon: <Compass className="h-4 w-4" />,
+    },
+    {
+      label: 'My Bookings',
+      path: '/bookings',
+      icon: <CalendarCheck className="h-4 w-4" />,
+    },
+    {
+      label: 'Incoming Requests',
+      path: '/bookings/incoming',
+      icon: <Inbox className="h-4 w-4" />,
     },
     {
       label: 'Institutions',
