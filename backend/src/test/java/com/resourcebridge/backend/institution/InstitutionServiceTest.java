@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -131,6 +132,28 @@ class InstitutionServiceTest {
         assertEquals(1, result.size());
         assertEquals("Apex Lab", result.get(0).name());
         assertEquals("INSTITUTION_ADMIN", result.get(0).role());
+    }
+
+    @Test
+    void listMyInstitutionsDeduplicatesDuplicateInstitutionIds() {
+        when(appUserRepository.findByUsername("test_admin")).thenReturn(Optional.of(adminUser));
+
+        UUID institutionId = UUID.randomUUID();
+        Institution inst = new Institution("Apex Lab", "apex-lab", "UTC");
+        ReflectionTestUtils.setField(inst, "id", institutionId);
+
+        Membership primaryMembership = new Membership(adminUser, inst, "INSTITUTION_ADMIN", "ACTIVE", null);
+        Membership duplicateMembership = new Membership(adminUser, inst, "MEMBER", "ACTIVE", null);
+
+        when(membershipRepository.findByUserIdWithInstitution(any())).thenReturn(List.of(primaryMembership, duplicateMembership));
+
+        List<InstitutionSummaryResponse> result = institutionService.listMyInstitutions("test_admin");
+
+        assertEquals(1, result.size());
+        assertEquals(institutionId, result.get(0).id());
+        assertEquals("Apex Lab", result.get(0).name());
+        assertEquals("INSTITUTION_ADMIN", result.get(0).role());
+        assertEquals("ACTIVE", result.get(0).membershipStatus());
     }
 
     @Test
