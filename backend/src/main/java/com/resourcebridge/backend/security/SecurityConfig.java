@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -25,6 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 import java.util.List;
 
 import java.io.IOException;
@@ -37,7 +39,12 @@ public class SecurityConfig {
     static final String CSRF_PATH = "/api/auth/csrf";
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            CorsConfigurationSource corsConfigurationSource,
+            @Value("${resourcebridge.csrf.cookie.same-site:lax}") String csrfCookieSameSite,
+            @Value("${resourcebridge.csrf.cookie.secure:false}") boolean csrfCookieSecure
+    ) throws Exception {
         // Each matcher matches ONLY its own method and path.
         PathPatternRequestMatcher registerEndpoint =
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, REGISTER_PATH);
@@ -47,11 +54,11 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, CSRF_PATH);
 
         http
-                // CSRF stays enabled. The token travels in a cookie the SPA can read and is echoed back in a header.
+                // CSRF stays enabled. The SPA obtains the token through the credentialed CSRF endpoint.
                 // Registration and GET CSRF probe are exempt. Login is NOT exempt.
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(csrfTokenRepository(csrfCookieSameSite, csrfCookieSecure))
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers(registerEndpoint, loginEndpoint, csrfEndpoint))
                 // Makes sure the XSRF-TOKEN cookie is actually written (see CsrfCookieFilter below).
@@ -84,16 +91,30 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${resourcebridge.cors.allowed-origin:}") String configuredOrigins
+    ) {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        List<String> allowedOrigins = new java.util.ArrayList<>(List.of("http://localhost:5173"));
+        if (configuredOrigins != null && !configuredOrigins.isBlank()) {
+            List<String> deploymentOrigins = Arrays.stream(configuredOrigins.split(","))
+                    .map(String::trim)
+                    .filter(origin -> !origin.isEmpty())
+                    .toList();
+            if (deploymentOrigins.contains("*")) {
+                throw new IllegalArgumentException("CORS_ALLOWED_ORIGIN must be an explicit origin, not '*'");
+            }
+            allowedOrigins.addAll(deploymentOrigins);
+        }
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
         );
         configuration.setAllowedHeaders(
                 List.of("*")
         );
+        configuration.setExposedHeaders(List.of("X-CSRF-TOKEN"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source =
@@ -102,6 +123,14 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
 
         return source;
+    }
+
+    CookieCsrfTokenRepository csrfTokenRepository(String sameSite, boolean secure) {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieCustomizer(cookie -> cookie
+                .sameSite(sameSite)
+                .secure(secure));
+        return repository;
     }
 
     /**
@@ -116,7 +145,10 @@ public class SecurityConfig {
                                         FilterChain filterChain) throws ServletException, IOException {
             CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
             if (csrfToken != null) {
-                csrfToken.getToken();
+                String token = csrfToken.getToken();
+                if (HttpMethod.GET.matches(request.getMethod()) && CSRF_PATH.equals(request.getServletPath())) {
+                    response.setHeader("X-CSRF-TOKEN", token);
+                }
             }
             filterChain.doFilter(request, response);
         }
