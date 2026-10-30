@@ -52,7 +52,7 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   responseType?: 'json' | 'blob';
 }
 
-const RAW_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8080';
+const RAW_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 // Remove trailing slash if present
 export const API_BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
