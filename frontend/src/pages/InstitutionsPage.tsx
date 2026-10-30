@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Building2,
   Plus,
@@ -11,7 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { institutionService } from '../features/institutions/institutionService';
-import { InstitutionSummary } from '../features/institutions/institutionTypes';
+import { InstitutionDirectoryEntry, InstitutionSummary } from '../features/institutions/institutionTypes';
 import { ResourcePhoto } from '../features/resources/ResourcePhoto';
 import { validateImageFile } from '../features/images/validateImageFile';
 import { Button } from '../components/ui/Button';
@@ -22,7 +22,13 @@ import { Loader } from '../components/ui/Loader';
 import { ApiClientError } from '../services/api';
 
 export const InstitutionsPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [institutions, setInstitutions] = useState<InstitutionSummary[]>([]);
+  const [memberships, setMemberships] = useState<InstitutionSummary[]>([]);
+  const [directory, setDirectory] = useState<InstitutionDirectoryEntry[]>([]);
+  const [membershipActionId, setMembershipActionId] = useState<string | null>(null);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,8 +48,14 @@ export const InstitutionsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await institutionService.listMyInstitutions();
+      const [data, membershipData, directoryData] = await Promise.all([
+        institutionService.listMyInstitutions(),
+        institutionService.listMyMemberships(),
+        institutionService.listDirectory(),
+      ]);
       setInstitutions(data);
+      setMemberships(membershipData);
+      setDirectory(directoryData);
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setError(err.message || 'Failed to load institutions');
@@ -55,9 +67,39 @@ export const InstitutionsPage: React.FC = () => {
     }
   }, []);
 
+  const requestMembership = async (institutionId: string) => {
+    setMembershipActionId(institutionId);
+    setMembershipError(null);
+    try {
+      await institutionService.requestMembership(institutionId);
+      const [membershipData, institutionData] = await Promise.all([
+        institutionService.listMyMemberships(),
+        institutionService.listMyInstitutions(),
+      ]);
+      setMemberships(membershipData);
+      setInstitutions(institutionData);
+    } catch (err: unknown) {
+      setMembershipError(err instanceof ApiClientError
+        ? err.message
+        : 'Unable to send the membership request. Please try again.');
+    } finally {
+      setMembershipActionId(null);
+    }
+  };
+
+  const membershipByInstitution = new Map(memberships.map((membership) => [membership.id, membership]));
+
   useEffect(() => {
     fetchInstitutions();
   }, [fetchInstitutions]);
+
+  useEffect(() => {
+    const navigationState = location.state as { openCreateInstitution?: boolean } | null;
+    if (navigationState?.openCreateInstitution) {
+      setShowCreateModal(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.key, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     if (!showCreateModal || !selectedLogo) {
@@ -196,11 +238,11 @@ export const InstitutionsPage: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
             <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Institution Management Active</span>
+            <span>Your campus network</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <Building2 className="h-7 w-7 text-indigo-600" />
-            Partner Institutions
+            <Building2 className="h-7 w-7 text-brand-700" />
+            Institutions
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
             Universities, research consortia, and laboratories using ResourceBridge to coordinate resource sharing.
@@ -243,7 +285,7 @@ export const InstitutionsPage: React.FC = () => {
           icon={<Building2 className="h-7 w-7 text-indigo-600" />}
           title="No Institutions Found"
           badgeText="Active Membership Required"
-          description="You are not currently an active member of any institution. Create an institution to become its administrator. Joining existing institutions is not available yet."
+          description="Create an institution to become its administrator, or request to join an existing institution."
           actionLabel="Create Your First Institution"
           onAction={() => setShowCreateModal(true)}
         />
@@ -252,17 +294,17 @@ export const InstitutionsPage: React.FC = () => {
           {institutions.map((inst) => (
             <div
               key={inst.id}
-              className="bg-white border border-slate-200/90 rounded-xl p-6 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between"
+              className="bg-white border border-[#e7e5df] rounded-2xl p-6 shadow-sm hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5 transition-all duration-200 flex flex-col justify-between"
             >
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-2">
                   <ResourcePhoto
                     imageId={inst.logoId}
                     alt={`${inst.name} logo`}
-                    className="h-14 w-14 rounded-lg object-cover border border-indigo-100"
+                    className="h-14 w-14 rounded-xl object-cover border border-[#e7e5df]"
                   />
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-800 border border-brand-200">
                       {inst.role}
                     </span>
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -275,15 +317,12 @@ export const InstitutionsPage: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-base tracking-tight mb-1">
                     {inst.name}
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono">
-                    slug: {inst.slug}
-                  </p>
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500">
                   <div className="flex items-center gap-2">
                     <Globe className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Timezone: {inst.timezone}</span>
+                    <span>Local time zone: {inst.timezone}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -308,6 +347,71 @@ export const InstitutionsPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      <section className="space-y-5" aria-labelledby="institution-directory-heading">
+        <div className="flex items-end justify-between gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <h2 id="institution-directory-heading" className="text-lg font-bold text-slate-900">
+              Find an institution
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Request access to an active institution. An administrator must approve your membership.
+            </p>
+          </div>
+        </div>
+        {membershipError && (
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {membershipError}
+          </div>
+        )}
+        {directory.length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+            No institutions are currently listed.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {directory.map((entry) => {
+              const membership = membershipByInstitution.get(entry.id);
+              const status = membership?.membershipStatus;
+              return (
+                <article key={entry.id} className="flex items-center justify-between gap-4 rounded-2xl border border-[#e7e5df] bg-white p-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ResourcePhoto
+                      imageId={entry.logoId}
+                      alt={`${entry.name} logo`}
+                      className="h-12 w-12 shrink-0 rounded-xl border border-slate-200 object-cover"
+                    />
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-slate-900">{entry.name}</h3>
+                      <p className="text-xs text-slate-500">{entry.timezone}</p>
+                      {status && <p className="mt-1 text-xs font-medium text-brand-700">Membership: {status}</p>}
+                    </div>
+                  </div>
+                  {status === 'ACTIVE' ? (
+                    <Link to={`/institutions/${entry.id}`}>
+                      <Button variant="secondary" size="sm">View</Button>
+                    </Link>
+                  ) : status === 'PENDING' ? (
+                    <Button variant="secondary" size="sm" disabled>Pending</Button>
+                  ) : status === 'SUSPENDED' ? (
+                    <Button variant="secondary" size="sm" disabled>Unavailable</Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={membershipActionId === entry.id}
+                      disabled={membershipActionId !== null}
+                      onClick={() => void requestMembership(entry.id)}
+                    >
+                      {status === 'REJECTED' ? 'Request again' : 'Request to join'}
+                    </Button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* Create Institution Modal Dialog */}
       {showCreateModal && (

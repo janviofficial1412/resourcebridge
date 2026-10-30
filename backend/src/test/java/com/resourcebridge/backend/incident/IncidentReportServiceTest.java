@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -129,6 +130,95 @@ class IncidentReportServiceTest {
         IncidentReportResponse response = service.create(institutionId, originalText, "requester");
 
         assertEquals(originalText, response.reportText());
+    }
+
+    @Test
+    void studentsCanListOnlyTheirOwnReportsWithActiveMemberships() {
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", reporterId)));
+        when(membershipRepository.findActiveByUserIdWithInstitution(reporterId))
+                .thenReturn(java.util.List.of(reporterMembership));
+        when(reportRepository.findByReporterUserIdWithDetails(reporterId))
+                .thenReturn(java.util.List.of(report));
+
+        var responses = service.getMyReports("requester");
+
+        assertEquals(1, responses.size());
+        assertEquals(incidentId, responses.get(0).id());
+        assertEquals("OPEN", responses.get(0).status());
+    }
+
+    @Test
+    void institutionReportsRequireAnActiveAdministrator() {
+        Membership member = activeMembership(otherUserId, "MEMBER", "ACTIVE");
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", otherUserId)));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(otherUserId, institutionId))
+                .thenReturn(Optional.of(member));
+
+        assertThrows(IncidentReportService.IncidentAccessDeniedException.class,
+                () -> service.getInstitutionReports(institutionId, "requester"));
+        verify(reportRepository, never()).findByInstitutionIdWithDetails(any());
+    }
+
+    @Test
+    void institutionAdministratorCanListReportsOnlyWithinTheirInstitution() {
+        Membership admin = activeMembership(otherUserId, "ADMIN", "ACTIVE");
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", otherUserId)));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(otherUserId, institutionId))
+                .thenReturn(Optional.of(admin));
+        when(reportRepository.findByInstitutionIdWithDetails(institutionId)).thenReturn(java.util.List.of(report));
+
+        var responses = service.getInstitutionReports(institutionId, "requester");
+
+        assertEquals(1, responses.size());
+        verify(reportRepository).findByInstitutionIdWithDetails(institutionId);
+    }
+
+    @Test
+    void administratorCanRecordResolutionAndStatus() {
+        Membership admin = activeMembership(otherUserId, "ADMIN", "ACTIVE");
+        when(reportRepository.findByIdWithDetails(incidentId)).thenReturn(Optional.of(report));
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", otherUserId)));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(otherUserId, institutionId))
+                .thenReturn(Optional.of(admin));
+        when(reportRepository.saveAndFlush(report)).thenReturn(report);
+
+        IncidentReportResponse response = service.update(incidentId,
+                new UpdateIncidentReportRequest(IncidentStatus.RESOLVED, "Repaired and tested."),
+                "requester");
+
+        assertEquals("RESOLVED", response.status());
+        assertEquals("Repaired and tested.", response.resolution());
+        assertEquals(admin.getId(), report.getResolvedByMembershipId());
+        assertNotNull(report.getResolvedAt());
+    }
+
+    @Test
+    void resolvingReportRequiresResolutionNote() {
+        Membership admin = activeMembership(otherUserId, "ADMIN", "ACTIVE");
+        when(reportRepository.findByIdWithDetails(incidentId)).thenReturn(Optional.of(report));
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", otherUserId)));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(otherUserId, institutionId))
+                .thenReturn(Optional.of(admin));
+
+        assertThrows(IncidentReportService.IncidentValidationException.class,
+                () -> service.update(incidentId,
+                        new UpdateIncidentReportRequest(IncidentStatus.RESOLVED, " "),
+                        "requester"));
+        verify(reportRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void studentCannotUpdateIncidentStatusOrResolution() {
+        when(reportRepository.findByIdWithDetails(incidentId)).thenReturn(Optional.of(report));
+        when(userRepository.findByUsername("requester")).thenReturn(Optional.of(user("requester", reporterId)));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(reporterId, institutionId))
+                .thenReturn(Optional.of(reporterMembership));
+
+        assertThrows(IncidentReportService.IncidentAccessDeniedException.class,
+                () -> service.update(incidentId,
+                        new UpdateIncidentReportRequest(IncidentStatus.IN_PROGRESS, null),
+                        "requester"));
+        verify(reportRepository, never()).saveAndFlush(any());
     }
 
     private Membership activeMembership(UUID userId, String role, String status) {

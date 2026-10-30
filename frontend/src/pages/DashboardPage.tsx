@@ -1,402 +1,333 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
-  Layers,
-  Compass,
-  Briefcase,
-  Building2,
-  Plus,
-  ShieldCheck,
-  Activity,
+  AlertCircle,
   ArrowRight,
-  Lock,
+  Building2,
+  CalendarCheck,
+  Clock,
+  ClipboardList,
+  Compass,
+  Package,
+  Plus,
+  RefreshCw,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
 import { SummaryCard } from '../components/ui/SummaryCard';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ErrorState } from '../components/ui/ErrorState';
+import { Loader } from '../components/ui/Loader';
 import { institutionService } from '../features/institutions/institutionService';
-import { resourceService } from '../features/resources/resourceService';
+import { InstitutionSummary } from '../features/institutions/institutionTypes';
+import { dashboardService, DashboardData } from '../features/dashboard/dashboardService';
+import { bookingService } from '../features/bookings/bookingService';
+import { BookingResponse } from '../features/bookings/bookingTypes';
+import { incidentService, IncidentReport } from '../features/incidents/incidentService';
+import { ApiClientError } from '../services/api';
+
+interface ActivityItem {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+}
 
 export const DashboardPage: React.FC = () => {
+  const location = useLocation();
   const { user } = useAuth();
-  const [institutionCount, setInstitutionCount] = useState<number | null>(null);
-  const [sharedResourcesCount, setSharedResourcesCount] = useState<number | null>(null);
+  const [memberships, setMemberships] = useState<InstitutionSummary[]>([]);
+  const [selectedInstitutionId, setSelectedInstitutionId] = useState('');
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshRevision, setRefreshRevision] = useState(0);
 
-  useEffect(() => {
-    let isMounted = true;
-    institutionService.listMyInstitutions()
-      .then((insts) => {
-        if (isMounted) {
-          setInstitutionCount(insts.length);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setInstitutionCount(null);
-        }
-      });
+  const activeMemberships = useMemo(
+    () => memberships.filter((membership) => membership.membershipStatus === 'ACTIVE'),
+    [memberships]
+  );
+  const selectedMembership = activeMemberships.find((membership) => membership.id === selectedInstitutionId);
+  const isAdmin = dashboard?.role === 'ADMIN';
 
-    resourceService.getMyResources()
-      .then((res) => {
-        if (isMounted) {
-          setSharedResourcesCount(res.length);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setSharedResourcesCount(null);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
+  const loadMemberships = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const loaded = await institutionService.listMyMemberships();
+      setMemberships(loaded);
+      const active = loaded.filter((membership) => membership.membershipStatus === 'ACTIVE');
+      setSelectedInstitutionId((current) =>
+        active.some((membership) => membership.id === current) ? current : active[0]?.id ?? ''
+      );
+      setRefreshRevision((revision) => revision + 1);
+    } catch (reason: unknown) {
+      setError(reason instanceof ApiClientError
+        ? reason.message
+        : 'Unable to load your institution memberships.');
+      setIsLoading(false);
+    }
   }, []);
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* ------------------------------------------------------------------
-          A. WELCOME SECTION (USERNAME GREETING, NO EMAIL FALLBACK)
-      ------------------------------------------------------------------- */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Spring Security Session Active</span>
-            </div>
+  useEffect(() => {
+    void loadMemberships();
+  }, [loadMemberships]);
 
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-              {user?.username ? (
-                <>
-                  Welcome back, <span className="text-brand-600">{user.fullName}</span>!
-                </>
-              ) : (
-                <>Welcome back!</>
-              )}
-            </h1>
+  useEffect(() => {
+    if (!selectedInstitutionId) {
+      setDashboard(null);
+      setActivity([]);
+      setIsLoading(false);
+      return;
+    }
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+    const loadInstitutionDashboard = async () => {
+      try {
+        const [metrics, membershipData] = await Promise.all([
+          dashboardService.get(selectedInstitutionId),
+          institutionService.listMyMemberships(),
+        ]);
+        if (!active) return;
+        setDashboard(metrics);
+        const role = membershipData.find((membership) => membership.id === selectedInstitutionId)?.role;
+        let bookings: BookingResponse[];
+        let reports: IncidentReport[];
+        if (role === 'ADMIN') {
+          [bookings, reports] = await Promise.all([
+            bookingService.getIncomingBookings(undefined, selectedInstitutionId),
+            incidentService.listInstitutionReports(selectedInstitutionId),
+          ]);
+        } else {
+          const [allBookings, allReports] = await Promise.all([
+            bookingService.getMyBookings(),
+            incidentService.listMyReports(),
+          ]);
+          bookings = allBookings.filter((booking) => booking.institutionId === selectedInstitutionId);
+          reports = allReports.filter((report) => report.institutionId === selectedInstitutionId);
+        }
+        if (!active) return;
+        const bookingActivity = bookings.map((booking) => ({
+          id: `booking-${booking.id}`,
+          title: role === 'ADMIN' ? 'Booking request received' : 'Booking request submitted',
+          description: `${booking.resourceName} · ${booking.requesterName}`,
+          createdAt: booking.createdAt,
+        }));
+        const reportActivity = reports.map((report) => ({
+          id: `incident-${report.id}`,
+          title: 'Incident report submitted',
+          description: role === 'ADMIN'
+            ? `${report.reporterName} · ${report.institutionName}`
+            : report.institutionName,
+          createdAt: report.createdAt,
+        }));
+        setActivity([...bookingActivity, ...reportActivity]
+          .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+          .slice(0, 5));
+      } catch (reason: unknown) {
+        if (active) {
+          setError(reason instanceof ApiClientError
+            ? reason.message
+            : 'Unable to load dashboard information.');
+          setDashboard(null);
+          setActivity([]);
+        }
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+    void loadInstitutionDashboard();
+    return () => {
+      active = false;
+    };
+  }, [selectedInstitutionId, refreshRevision]);
 
-            <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
-              ResourceBridge connects academic departments, laboratories, and makerspaces to facilitate verified sharing of specialized research equipment and facilities within trusted campus boundaries.
-            </p>
-          </div>
+  if (isLoading && memberships.length === 0) {
+    return <div className="flex justify-center py-20"><Loader size="lg" label="Loading your workspace..." /></div>;
+  }
 
-          {/* Action CTAs */}
-          <div className="flex flex-wrap items-center gap-3">
-            {institutionCount === 0 ? (
-              <Link to="/institutions">
-                <Button variant="primary" size="md" leftIcon={<Plus className="h-4 w-4" />}>
-                  Create or Manage Institutions
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link to="/discover">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    leftIcon={<Compass className="h-4 w-4" />}
-                    rightIcon={<ArrowRight className="h-4 w-4" />}
-                  >
-                    Discover Resources
-                  </Button>
-                </Link>
-
-                <Link to="/my-resources">
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    leftIcon={<Plus className="h-4 w-4 text-brand-600" />}
-                  >
-                    <span>Share a Resource</span>
-                    <span className="ml-1 text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      Active
-                    </span>
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
+  if (error && !dashboard) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-12">
+        <ErrorState title="Unable to load your workspace" message={error} onRetry={loadMemberships} />
       </div>
+    );
+  }
 
-      {institutionCount === 0 && (
+  if (memberships.length === 0 || activeMemberships.length === 0) {
+    const pending = memberships.some((membership) => membership.membershipStatus === 'PENDING');
+    const registrationIntent = (location.state as { registrationIntent?: string } | null)?.registrationIntent;
+    const studentOnboarding = registrationIntent === 'STUDENT';
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-12">
         <EmptyState
           icon={<Building2 className="h-7 w-7 text-brand-600" />}
-          title="Create an institution to get started"
-          badgeText="No active memberships"
-          description="Your account remains active, but resources and bookings require an active institution membership. Creating an institution is available; joining an existing one is not yet supported."
-          actionLabel="Create Institution"
+          title={pending
+            ? 'Your membership request is awaiting approval'
+            : studentOnboarding ? 'Find your institution' : 'Choose your institution'}
+          badgeText={pending ? 'Membership pending' : 'No active memberships'}
+          description={pending
+            ? 'An institution administrator will review your request. You can explore other institutions while you wait.'
+            : studentOnboarding
+              ? 'Browse the institution directory and request student membership. Once approved, you can discover, match, book, and report resources.'
+              : 'Create an institution or request to join an existing one to access resources and bookings.'}
+          actionLabel={studentOnboarding ? 'Browse Institutions' : 'Explore Institutions'}
           actionHref="/institutions"
         />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-5 border-b border-[#e7e5df] pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800">
+            {isAdmin ? 'Institution administrator workspace' : 'Student workspace'}
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Welcome back, {user?.fullName || user?.username || 'there'}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {dashboard?.institutionName || selectedMembership?.name || 'Your institution'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label htmlFor="dashboard-institution" className="sr-only">Select institution workspace</label>
+          <select
+            id="dashboard-institution"
+            value={selectedInstitutionId}
+            onChange={(event) => setSelectedInstitutionId(event.target.value)}
+            className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800"
+          >
+            {activeMemberships.map((membership) => (
+              <option key={membership.id} value={membership.id}>
+                {membership.name} · {membership.role === 'ADMIN' ? 'Administrator' : 'Student'}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void loadMemberships()}
+            leftIcon={<RefreshCw className="h-4 w-4" />}>
+            Refresh
+          </Button>
+        </div>
+      </header>
+
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader size="lg" label="Loading institution metrics..." /></div>
+      ) : dashboard && (
+        <>
+          <section aria-label="Workspace metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {isAdmin ? (
+              <>
+                <SummaryCard title="Total resources" value={dashboard.totalResources} status="active"
+                  badgeText="Institution catalog" icon={<Package className="h-4 w-4 text-brand-700" />}
+                  description="Resources registered across this institution." />
+                <SummaryCard title="Available resources" value={dashboard.availableResources} status="active"
+                  badgeText="Available" icon={<Compass className="h-4 w-4 text-brand-700" />}
+                  description="Resources currently marked available." />
+                <SummaryCard title="Pending booking requests" value={dashboard.pendingBookingRequests} status="pending"
+                  badgeText="Needs review" icon={<CalendarCheck className="h-4 w-4 text-brand-700" />}
+                  description="Student requests awaiting an administrator decision." />
+                <SummaryCard title="Active students" value={dashboard.activeStudents} status="active"
+                  badgeText="Active members" icon={<Users className="h-4 w-4 text-brand-700" />}
+                  description="Students with active institution memberships." />
+                <SummaryCard title="Open incident reports" value={dashboard.pendingIncidents} status="pending"
+                  badgeText="Open or in progress" icon={<AlertCircle className="h-4 w-4 text-brand-700" />}
+                  description="Reports that still need administrative attention." />
+              </>
+            ) : (
+              <>
+                <SummaryCard title="Eligible available resources" value={dashboard.availableResources} status="active"
+                  badgeText="In this institution" icon={<Package className="h-4 w-4 text-brand-700" />}
+                  description="Available resources excluding resources you own." />
+                <SummaryCard title="My bookings" value={dashboard.myBookings} status="active"
+                  badgeText="All statuses" icon={<CalendarCheck className="h-4 w-4 text-brand-700" />}
+                  description="Your booking requests and reservations." />
+                <SummaryCard title="Pending booking requests" value={dashboard.myPendingBookings} status="pending"
+                  badgeText="Awaiting review" icon={<RefreshCw className="h-4 w-4 text-brand-700" />}
+                  description="Requests that have not yet been decided." />
+                <SummaryCard title="My incident reports" value={dashboard.myIncidents} status="active"
+                  badgeText="Submitted" icon={<ClipboardList className="h-4 w-4 text-brand-700" />}
+                  description="Reports you have submitted to this institution." />
+              </>
+            )}
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <div className="rounded-2xl border border-[#e7e5df] bg-white p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-slate-900">Recent activity</h2>
+                  <p className="mt-1 text-xs text-slate-500">Latest booking requests and incident reports.</p>
+                </div>
+                <Clock className="h-4 w-4 text-slate-400" aria-hidden />
+              </div>
+              {activity.length === 0 ? (
+                <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+                  No recent booking or incident activity.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {activity.map((item) => (
+                    <li key={item.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{item.title}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                      </div>
+                      <time className="shrink-0 text-xs text-slate-400" dateTime={item.createdAt}>
+                        {new Date(item.createdAt).toLocaleDateString()}
+                      </time>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[#e7e5df] bg-white p-6">
+              <h2 className="font-semibold text-slate-900">Quick actions</h2>
+              <div className="mt-4 grid gap-3">
+                {isAdmin ? (
+                  <>
+                    <ActionLink to="/my-resources" icon={<Plus className="h-4 w-4" />} title="Manage resources"
+                      detail="Add, update, or retire institutional resources." />
+                    <ActionLink to="/bookings/incoming" icon={<CalendarCheck className="h-4 w-4" />} title="Review booking requests"
+                      detail="Approve or reject student requests." />
+                    <ActionLink to="/institutions" icon={<Users className="h-4 w-4" />} title="Manage members"
+                      detail="Review membership requests and active students." />
+                  </>
+                ) : (
+                  <>
+                    <ActionLink to="/discover" icon={<Compass className="h-4 w-4" />} title="Discover resources"
+                      detail="Search available equipment and spaces." />
+                    <ActionLink to="/bookings" icon={<CalendarCheck className="h-4 w-4" />} title="My bookings"
+                      detail="Review your booking requests and history." />
+                    <ActionLink to={`/institutions/${selectedInstitutionId}`} icon={<ClipboardList className="h-4 w-4" />}
+                      title="Report an incident" detail="Submit a report and track its status." />
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+        </>
       )}
-
-      {/* ------------------------------------------------------------------
-          B. SUMMARY CARDS (HONEST REPORTING WITH LIVE INSTITUTIONS)
-      ------------------------------------------------------------------- */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">Platform Metrics</h2>
-            <p className="text-xs text-slate-500">Live indicators based on verified backend service responses</p>
-          </div>
-          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
-            Phase 5 Resources Active
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard
-            title="Available Resources"
-            value="—"
-            status="pending"
-            badgeText="API Pending"
-            icon={<Layers className="h-4 w-4 text-brand-600" />}
-            description="Total lab equipment and campus facilities registered across partner campuses."
-            helpText="Awaiting GET /api/resources in Phase 6"
-          />
-
-          <SummaryCard
-            title="Resources Shared by You"
-            value={sharedResourcesCount !== null ? sharedResourcesCount : '—'}
-            status={sharedResourcesCount !== null ? 'active' : 'pending'}
-            badgeText={sharedResourcesCount !== null ? `${sharedResourcesCount} Active` : 'Checking API'}
-            icon={<Briefcase className="h-4 w-4 text-indigo-600" />}
-            description="Instruments, tools, or research spaces registered under your ownership."
-            helpText="Connected to GET /api/resources/my"
-          />
-
-          <SummaryCard
-            title="Joined Institutions"
-            value={institutionCount !== null ? institutionCount : '—'}
-            status={institutionCount !== null ? 'active' : 'pending'}
-            badgeText={institutionCount !== null ? `${institutionCount} Active` : 'Checking API'}
-            icon={<Building2 className="h-4 w-4 text-emerald-600" />}
-            description="Universities, departments, or research groups where you have active verified membership."
-            helpText="Connected to GET /api/institutions"
-          />
-
-          <SummaryCard
-            title="Pending Invitations"
-            value="—"
-            status="pending"
-            badgeText="API Pending"
-            icon={<ShieldCheck className="h-4 w-4 text-amber-600" />}
-            description="Unverified membership requests awaiting departmental administrator review."
-            helpText="Awaiting invitation flow"
-          />
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------
-          C. QUICK ACTIONS
-      ------------------------------------------------------------------- */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-base font-bold text-slate-900 tracking-tight">Quick Actions</h2>
-          <p className="text-xs text-slate-500">Access core campus sharing workflows and directories</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Action 1: Discover Resources */}
-          <Link
-            to="/discover"
-            className="group bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="h-10 w-10 rounded-lg bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Compass className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm group-hover:text-brand-600 transition-colors">
-                  Discover Resources
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  Search shared lab instruments, 3D printers, and campus spaces across institutions.
-                </p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-              <span className="text-xs font-semibold text-brand-600 flex items-center gap-1">
-                Browse catalog <ArrowRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Action 2: Share a Resource */}
-          <Link
-            to="/my-resources"
-            className="group bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Plus className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-900 text-sm group-hover:text-brand-600 transition-colors">
-                    Share a Resource
-                  </h3>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Active
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  List your department's tools or facilities for verified peer academic use.
-                </p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-              <span className="text-xs font-semibold text-brand-600 flex items-center gap-1">
-                Register resource <ArrowRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Action 3: Explore Institutions */}
-          <Link
-            to="/institutions"
-            className="group bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
-                  Explore Institutions
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  Browse partner universities, faculties, and manage your department memberships.
-                </p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                View directory <ArrowRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Action 4: Manage My Resources */}
-          <Link
-            to="/my-resources"
-            className="group bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-slate-300 hover:shadow-sm transition-all flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="h-10 w-10 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Briefcase className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-900 text-sm">
-                    Manage Resources
-                  </h3>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                    Phase 5
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  Review booking requests, condition ratings, and custody transfers for your gear.
-                </p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-              <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                Manage gear <ArrowRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------
-          D. RECENT ACTIVITY (CLEAN EMPTY STATE — NO FAKE LOGS)
-      ------------------------------------------------------------------- */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Activity className="h-4 w-4 text-brand-600" />
-              Recent Institutional Activity
-            </h2>
-            <p className="text-xs text-slate-500">
-              Audit log records for reservations, checkouts, and membership changes
-            </p>
-          </div>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-            Awaiting Activity Endpoint
-          </span>
-        </div>
-
-        {/* Empty State Presentation */}
-        <EmptyState
-          icon={<Activity className="h-6 w-6 text-slate-400" />}
-          title="No Recent Activity"
-          badgeText="Audit Log API Pending"
-          description="Activity tracking will record resource reservations, custody handovers, and membership approvals once institutional activity begins on your account. The frontend intentionally avoids querying the internal database audit_log table directly."
-          actionLabel="Explore Campus Resources"
-          actionHref="/discover"
-        />
-      </div>
-
-      {/* ------------------------------------------------------------------
-          E. SECURITY & SESSION ARCHITECTURE GUARANTEES
-      ------------------------------------------------------------------- */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Active Session Security Architecture
-          </h2>
-          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-            Verified Compliant
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-            <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-brand-600" />
-              Authentication Mechanism
-            </span>
-            <p className="text-slate-500 leading-relaxed">
-              Username-based session authentication with HTTP-only <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">JSESSIONID</code> managed by Spring Security.
-            </p>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-            <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              CSRF Defense
-            </span>
-            <p className="text-slate-500 leading-relaxed">
-              <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">X-XSRF-TOKEN</code> header automatically attached to all mutating HTTP methods.
-            </p>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-            <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-indigo-600" />
-              Storage Security
-            </span>
-            <p className="text-slate-500 leading-relaxed">
-              Zero passwords, tokens, or simulated states in <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">localStorage</code>.
-            </p>
-          </div>
-
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-            <span className="font-semibold text-slate-800 flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              Session Persistence
-            </span>
-            <p className="text-slate-500 leading-relaxed">
-              <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-[11px]">GET /api/auth/me</code> restores authenticated state on tab refresh securely.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
+
+const ActionLink: React.FC<{ to: string; icon: React.ReactNode; title: string; detail: string }> = ({
+  to, icon, title, detail,
+}) => (
+  <Link to={to} className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/40">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">{icon}</span>
+    <span className="min-w-0 flex-1">
+      <span className="block text-sm font-medium text-slate-800 group-hover:text-brand-800">{title}</span>
+      <span className="mt-0.5 block text-xs text-slate-500">{detail}</span>
+    </span>
+    <ArrowRight className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-brand-700" />
+  </Link>
+);

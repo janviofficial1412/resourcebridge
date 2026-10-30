@@ -7,6 +7,7 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,16 +24,22 @@ class OllamaClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost:11434");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         OllamaClient client = new OllamaClient(builder.build(), new ObjectMapper(), "qwen2.5:3b");
+        UUID candidateId = UUID.randomUUID();
 
         server.expect(requestTo("http://localhost:11434/api/chat"))
                 .andExpect(method(POST))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("\"model\":\"qwen2.5:3b\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"additionalProperties\":false")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(candidateId.toString())))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Python laptop")))
                 .andRespond(withSuccess("""
                         {"message":{"content":"{\\"matches\\":[]}"}}
                         """, MediaType.APPLICATION_JSON));
 
-        assertEquals("{\"matches\":[]}", client.rank("Python laptop", List.of()));
+        assertEquals("{\"matches\":[]}", client.rank("Python laptop", List.of(
+                new ResourceMatchService.Candidate(
+                        candidateId, "Development laptop", "Laptop for Python",
+                        "Computing", "North College", "EQUIPMENT", "Lab"))));
         server.verify();
     }
 

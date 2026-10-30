@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -39,6 +40,24 @@ public class IncidentController {
     @GetMapping("/api/incidents/{incidentId}")
     public IncidentReportResponse get(@PathVariable UUID incidentId, Authentication authentication) {
         return incidentReportService.get(incidentId, username(authentication));
+    }
+
+    @GetMapping("/api/incidents/mine")
+    public java.util.List<IncidentReportResponse> getMyReports(Authentication authentication) {
+        return incidentReportService.getMyReports(username(authentication));
+    }
+
+    @GetMapping("/api/institutions/{institutionId}/incidents")
+    public java.util.List<IncidentReportResponse> getInstitutionReports(
+            @PathVariable UUID institutionId, Authentication authentication) {
+        return incidentReportService.getInstitutionReports(institutionId, username(authentication));
+    }
+
+    @PutMapping(value = "/api/incidents/{incidentId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public IncidentReportResponse update(@PathVariable UUID incidentId,
+                                         @Valid @RequestBody UpdateIncidentReportRequest request,
+                                         Authentication authentication) {
+        return incidentReportService.update(incidentId, request, username(authentication));
     }
 
     @PostMapping("/api/incidents/{incidentId}/summary")

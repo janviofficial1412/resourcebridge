@@ -13,6 +13,7 @@ import {
   Trash2,
   RefreshCw,
   SlidersHorizontal,
+  History,
 } from 'lucide-react';
 import { resourceService } from '../features/resources/resourceService';
 import { ResourceResponse } from '../features/resources/resourceTypes';
@@ -26,6 +27,9 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState } from '../components/ui/ErrorState';
 import { Loader } from '../components/ui/Loader';
 import { ApiClientError } from '../services/api';
+import { bookingService } from '../features/bookings/bookingService';
+import { BookingResponse } from '../features/bookings/bookingTypes';
+import { formatDateTimeRange } from '../features/bookings/bookingUtils';
 
 export const MyResourcesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,7 +37,8 @@ export const MyResourcesPage: React.FC = () => {
   const [resources, setResources] = useState<ResourceResponse[]>([]);
   const [institutions, setInstitutions] = useState<InstitutionSummary[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>('');
-  const canCreateResource = institutions.some((institution) => institution.role !== 'BORROWER');
+  const adminInstitutions = institutions.filter((institution) => institution.role === 'ADMIN');
+  const canCreateResource = adminInstitutions.length > 0;
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,25 +47,25 @@ export const MyResourcesPage: React.FC = () => {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [resourceToEdit, setResourceToEdit] = useState<ResourceResponse | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<ResourceResponse | null>(null);
+  const [historyResource, setHistoryResource] = useState<ResourceResponse | null>(null);
+  const [bookingHistory, setBookingHistory] = useState<BookingResponse[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Load institutions where user has membership
-  const fetchInstitutions = useCallback(async () => {
-    try {
-      const data = await institutionService.listMyInstitutions();
-      setInstitutions(data);
-    } catch (err) {
-      console.warn('Failed to load institutions list:', err);
-    }
-  }, []);
-
-  // Fetch resources based on selected institution filter
   const fetchResources = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const filterInstId = selectedInstitutionId ? selectedInstitutionId : undefined;
-      const data = await resourceService.getMyResources(filterInstId);
-      setResources(data);
+      const membershipData = await institutionService.listMyInstitutions();
+      setInstitutions(membershipData);
+      const managedInstitutions = membershipData
+        .filter((institution) => institution.role === 'ADMIN')
+        .filter((institution) =>
+        !selectedInstitutionId || institution.id === selectedInstitutionId);
+      const resourceLists = await Promise.all(
+        managedInstitutions.map((institution) => resourceService.getInstitutionResources(institution.id))
+      );
+      setResources(resourceLists.flat());
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message || 'Failed to retrieve your resources');
@@ -71,10 +76,6 @@ export const MyResourcesPage: React.FC = () => {
       setIsLoading(false);
     }
   }, [selectedInstitutionId]);
-
-  useEffect(() => {
-    fetchInstitutions();
-  }, [fetchInstitutions]);
 
   useEffect(() => {
     fetchResources();
@@ -92,6 +93,22 @@ export const MyResourcesPage: React.FC = () => {
 
   const handleOpenDeleteModal = (resource: ResourceResponse) => {
     setResourceToDelete(resource);
+  };
+
+  const handleOpenBookingHistory = async (resource: ResourceResponse) => {
+    setHistoryResource(resource);
+    setBookingHistory([]);
+    setHistoryError(null);
+    setIsLoadingHistory(true);
+    try {
+      setBookingHistory(await bookingService.getResourceHistory(resource.id));
+    } catch (reason: unknown) {
+      setHistoryError(reason instanceof ApiClientError
+        ? reason.message
+        : 'Unable to load booking history.');
+    } finally {
+      setIsLoadingHistory(false);
+    }
   };
 
   const handleResourceFormSuccess = useCallback(() => {
@@ -162,14 +179,14 @@ export const MyResourcesPage: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>Phase 5 • Resource Management Active</span>
+            <span>Institution administration</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Briefcase className="h-7 w-7 text-brand-600" />
-            My Shared Resources
+            Resource Management
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Manage laboratory instrumentation, workshop tools, and campus facilities registered under your institutional memberships.
+            Manage the resources shared by the institutions where you are an active administrator.
           </p>
         </div>
 
@@ -202,7 +219,7 @@ export const MyResourcesPage: React.FC = () => {
       </div>
 
       {/* Filter Toolbar */}
-      {institutions.length > 0 && (
+      {adminInstitutions.length > 0 && (
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
             <SlidersHorizontal className="h-4 w-4 text-slate-400" />
@@ -215,7 +232,7 @@ export const MyResourcesPage: React.FC = () => {
               className="text-xs rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
               <option value="">All Institutions ({resources.length} total)</option>
-              {institutions.map((inst) => (
+              {adminInstitutions.map((inst) => (
                 <option key={inst.id} value={inst.id}>
                   {inst.name}
                 </option>
@@ -250,11 +267,11 @@ export const MyResourcesPage: React.FC = () => {
         ) : (
           <EmptyState
             icon={<Briefcase className="h-7 w-7 text-brand-600" />}
-            title={canCreateResource ? 'No Resources Registered Yet' : 'Resource registration is restricted'}
-            badgeText="Ready for Sharing"
+            title={canCreateResource ? 'No institutional resources yet' : 'Administrator access required'}
+            badgeText={canCreateResource ? 'Ready for Sharing' : 'No admin memberships'}
             description={canCreateResource
-              ? 'You have not registered any equipment or research spaces for sharing. Click below to publish your first instrument to the campus directory.'
-              : 'Your active institution memberships do not permit resource registration.'}
+              ? 'No resources are registered in the institutions you administer. Add a resource to make it available for eligible members.'
+              : 'Resource creation and management are available to active institution administrators.'}
             actionLabel={canCreateResource ? 'Register First Resource' : undefined}
             onAction={canCreateResource ? handleOpenCreateModal : undefined}
           />
@@ -335,6 +352,14 @@ export const MyResourcesPage: React.FC = () => {
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void handleOpenBookingHistory(res)}
+                  leftIcon={<History className="h-3.5 w-3.5" />}
+                >
+                  Booking history
+                </Button>
+                <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => handleOpenEditModal(res)}
@@ -358,6 +383,67 @@ export const MyResourcesPage: React.FC = () => {
       )}
 
       {/* Modals */}
+      {historyResource && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="resource-booking-history-title"
+        >
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="resource-booking-history-title" className="text-lg font-bold text-slate-900">
+                  Booking history
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">{historyResource.name}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setHistoryResource(null)}>Close</Button>
+            </div>
+            {isLoadingHistory ? (
+              <div className="flex justify-center py-10"><Loader label="Loading booking history..." /></div>
+            ) : historyError ? (
+              <ErrorState title="Unable to load booking history" message={historyError}
+                onRetry={() => void handleOpenBookingHistory(historyResource)} />
+            ) : bookingHistory.length === 0 ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                No booking requests have been made for this resource.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {bookingHistory.map((booking) => {
+                  const completed = booking.status === 'CONFIRMED'
+                    && new Date(booking.endTime).getTime() < Date.now();
+                  return (
+                    <li key={booking.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-slate-900">{booking.requesterName}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {formatDateTimeRange(booking.startTime, booking.endTime)}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          {completed ? 'COMPLETED' : booking.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      {booking.requesterMessage && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{booking.requesterMessage}</p>
+                      )}
+                      {booking.decisionMessage && (
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                          Decision note: {booking.decisionMessage}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       <ResourceFormModal
         isOpen={isFormModalOpen}
         onClose={() => {
@@ -366,9 +452,7 @@ export const MyResourcesPage: React.FC = () => {
         }}
         onSuccess={handleResourceFormSuccess}
         resourceToEdit={resourceToEdit}
-        institutions={resourceToEdit
-          ? institutions
-          : institutions.filter((institution) => institution.role !== 'BORROWER')}
+        institutions={adminInstitutions}
       />
 
       <DeleteResourceModal

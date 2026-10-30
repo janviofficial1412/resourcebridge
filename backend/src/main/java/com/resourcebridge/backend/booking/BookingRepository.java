@@ -114,7 +114,29 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             "JOIN FETCH r.category " +
             "JOIN FETCH b.requesterMembership rm " +
             "JOIN FETCH rm.user " +
+            "LEFT JOIN FETCH b.decidedByMembership dm " +
+            "LEFT JOIN FETCH dm.user " +
+            "WHERE b.institution.id = :institutionId " +
+            "AND b.requesterMembership.id = :membershipId " +
+            "ORDER BY b.startTime DESC")
+    List<Booking> findByInstitutionIdAndRequesterMembershipIdWithDetails(
+            @Param("institutionId") UUID institutionId,
+            @Param("membershipId") UUID membershipId);
+
+    @Query("SELECT b FROM Booking b " +
+            "JOIN FETCH b.institution " +
+            "JOIN FETCH b.resource r " +
+            "JOIN FETCH r.category " +
+            "JOIN FETCH b.requesterMembership rm " +
+            "JOIN FETCH rm.user " +
             "WHERE b.institution.id = :institutionId " +
             "ORDER BY b.startTime DESC")
     List<Booking> findByInstitutionIdWithDetails(@Param("institutionId") UUID institutionId);
+
+    long countByInstitution_IdAndStatus(UUID institutionId, BookingStatus status);
+
+    long countByInstitution_IdAndRequesterMembership_User_IdAndStatus(
+            UUID institutionId, UUID userId, BookingStatus status);
+
+    long countByInstitution_IdAndRequesterMembership_User_Id(UUID institutionId, UUID userId);
 }

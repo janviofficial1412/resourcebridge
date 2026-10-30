@@ -31,6 +31,12 @@ export const resourceService = {
     return api.get<ResourceResponse[]>(url);
   },
 
+  async getInstitutionResources(institutionId: string): Promise<ResourceResponse[]> {
+    return api.get<ResourceResponse[]>(
+      `/api/resources/institution/${encodeURIComponent(institutionId)}`
+    );
+  },
+
   /**
    * Discovers AVAILABLE resources in the caller's active institutions.
    * An institution may optionally narrow the results.

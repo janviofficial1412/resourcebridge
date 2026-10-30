@@ -30,17 +30,27 @@ import { ErrorState } from '../components/ui/ErrorState';
 import { Loader } from '../components/ui/Loader';
 import { ApiClientError } from '../services/api';
 
-type FilterOption = 'ALL' | BookingStatus;
+type FilterOption = 'ALL' | BookingStatus | 'COMPLETED';
 
 const FILTER_TABS: { label: string; value: FilterOption }[] = [
   { label: 'All Bookings', value: 'ALL' },
   { label: 'Pending Approval', value: 'PENDING' },
   { label: 'Confirmed', value: 'CONFIRMED' },
+  { label: 'Completed', value: 'COMPLETED' },
   { label: 'Rejected', value: 'REJECTED' },
   { label: 'Cancelled', value: 'CANCELLED' },
 ];
 
-function BookingStatusBadge({ status }: { status: BookingStatus }) {
+function BookingStatusBadge({ booking }: { booking: BookingResponse }) {
+  const { status, endTime } = booking;
+  if (status === 'CONFIRMED' && new Date(endTime).getTime() < Date.now()) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-700">
+        <CheckCircle2 className="h-3.5 w-3.5 text-teal-600" aria-hidden />
+        Completed
+      </span>
+    );
+  }
   switch (status) {
     case 'CONFIRMED':
       return (
@@ -91,9 +101,14 @@ export const MyBookingsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const statusParam = selectedFilter === 'ALL' ? undefined : selectedFilter;
+      const statusParam = selectedFilter === 'ALL' || selectedFilter === 'COMPLETED'
+        ? undefined
+        : selectedFilter;
       const data = await bookingService.getMyBookings(statusParam);
-      setBookings(data);
+      setBookings(selectedFilter === 'COMPLETED'
+        ? data.filter((booking) =>
+          booking.status === 'CONFIRMED' && new Date(booking.endTime).getTime() < Date.now())
+        : data);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message || 'Failed to load bookings.');
@@ -248,7 +263,7 @@ export const MyBookingsPage: React.FC = () => {
           {bookings.map((booking) => (
             <article
               key={booking.id}
-              className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-2xs hover:border-brand-200 hover:shadow-xs transition-all space-y-4"
+              className="space-y-4 rounded-2xl border border-[#e7e5df] bg-white p-5 shadow-sm transition-all duration-200 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5 sm:p-6"
             >
               {/* Header row: resource, institution, status */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -279,7 +294,7 @@ export const MyBookingsPage: React.FC = () => {
                 </div>
 
                 <div className="shrink-0 flex items-center gap-3">
-                  <BookingStatusBadge status={booking.status} />
+                  <BookingStatusBadge booking={booking} />
                 </div>
               </div>
 

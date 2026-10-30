@@ -47,6 +47,15 @@ The authenticated endpoint is `POST /api/resources/match`. It accepts a required
 (`AI` or `DETERMINISTIC`), whether a booking window was checked, and resource matches with
 field-grounded explanations. Automated tests mock the Ollama client and do not require a model.
 
+For deployment, Ollama is not bundled with ResourceBridge. Install a version supporting Ollama's
+JSON Schema structured outputs, run it in the backend's network namespace, pull the configured
+model (`ollama pull qwen2.5:3b`), and configure
+`OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_CONNECT_TIMEOUT`, and `OLLAMA_RESPONSE_TIMEOUT` for the
+backend process. The current security policy permits only loopback Ollama URLs; a separate host or
+container service is not supported by this configuration. In a container deployment,
+`localhost` means the backend container itself, so Ollama must run in that same container/network
+namespace unless the deployment deliberately revises the local-only endpoint policy.
+
 ### Institution incident reports and AI summaries
 
 Active institution members can submit incident reports through the institution detail page.
@@ -57,12 +66,37 @@ summarize it. `POST /api/institutions/{institutionId}/incidents` creates a repor
 are not persisted and are labeled as requiring human review. They do not establish facts or make
 administrative decisions.
 
+Students can list their own reports with `GET /api/incidents/mine`. An active institution
+administrator can list institution reports with `GET /api/institutions/{institutionId}/incidents`
+and update status/resolution using `PUT /api/incidents/{incidentId}`. Resolved or closed reports
+require a resolution note. Administrative status and resolution are separate from the immutable
+original report text.
+
 Summaries use the same local-only Ollama endpoint and configured model as matching. They are subject
 to the configured Ollama response timeout; an unavailable model or invalid response returns a
 retryable service error. The input is limited to 10,000 characters. Flyway applies the additive
-`V6__create_incident_reports.sql` migration at backend startup; ensure the application database
-account is permitted to apply pending migrations before deploying this version. Tests mock Ollama
-and do not require a running local model.
+`V6__create_incident_reports.sql` and `V7__add_incident_status_and_resolution.sql` migrations at
+backend startup; ensure the application database account is permitted to apply pending migrations
+before deploying this version. Tests mock Ollama and do not require a running local model.
+
+### Institution roles and workflows
+
+Roles are scoped to each institution: active `ADMIN` memberships manage institutional resources,
+categories, membership requests, incoming bookings, and incident resolution; active `MEMBER`
+memberships are the student role and may discover resources, request bookings, and submit incidents.
+Membership status (`PENDING`, `ACTIVE`, `REJECTED`, or `SUSPENDED`) is independent of role. New
+institution creators receive an active `ADMIN` membership. Students can browse
+`GET /api/institutions/directory` and request membership with
+`POST /api/institutions/{institutionId}/membership-request`; admins approve/reject requests or
+deactivate active memberships through the institution member routes.
+
+The authenticated `GET /api/dashboard?institutionId={id}` endpoint returns metrics for the caller's
+active role in that institution. Students can request bookings; only active institution admins can
+approve or reject them. Rejections require a reason. Booking completion is derived from the end time
+of confirmed bookings and is not stored as a separate status. Active admins can view one student's
+bookings within their institution through
+`GET /api/bookings/institution/{institutionId}/member/{membershipId}`; the endpoint does not expose
+that student's bookings from other institutions.
 
 ### Backend tests
 

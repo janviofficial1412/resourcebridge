@@ -43,7 +43,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
 
   return (
     <div
-      className={`bg-white border border-slate-200/90 rounded-xl p-5 shadow-sm hover:border-slate-300 transition-colors flex flex-col justify-between ${className}`}
+      className={`bg-white border border-[#e7e5df] rounded-2xl p-5 shadow-sm transition-all duration-200 hover:border-brand-200 hover:shadow-md flex flex-col justify-between ${className}`}
     >
       <div>
         <div className="flex items-center justify-between gap-2 mb-3">

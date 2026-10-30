@@ -166,12 +166,23 @@ public class ResourceMatchService {
                     && !(exception instanceof InvalidRankingException)) {
                 throw exception;
             }
-            log.warn("Local AI matching unavailable or returned invalid output; using deterministic ranking ({})",
-                    exception.getClass().getSimpleName());
+            OllamaFailureClassifier.FailureType failureType = exception instanceof RestClientException
+                    ? OllamaFailureClassifier.classify(exception)
+                    : OllamaFailureClassifier.FailureType.OTHER;
+            log.warn("Local AI matching unavailable or returned invalid output; using deterministic ranking "
+                            + "(failureType={}, exception={})",
+                    failureType, exception.getClass().getSimpleName());
             List<ResourceMatchResponse.Match> fallbackMatches = fallbackMatches(eligible, criteria.keywords());
+            String fallbackReason = exception instanceof RestClientException
+                    ? switch (failureType) {
+                        case TIMEOUT -> "Local AI ranking timed out; deterministic fallback results are shown. ";
+                        case CONNECTION -> "The local AI service could not be reached; deterministic fallback results are shown. ";
+                        case OTHER -> "Local AI ranking could not be completed; deterministic fallback results are shown. ";
+                    }
+                    : "Local AI returned invalid ranking data; deterministic fallback results are shown. ";
             String fallbackMessage = fallbackMatches.isEmpty()
-                    ? "Local AI ranking could not be completed, and no eligible resources were retrieved."
-                    : "Local AI ranking could not be completed; deterministic fallback results are shown. "
+                    ? fallbackReason + "No eligible resources were retrieved."
+                    : fallbackReason
                     + responseMessage(bookingWindowChecked, criteria.proximityRequested());
             return response(ResourceMatchResponse.RankingMethod.DETERMINISTIC, bookingWindowChecked,
                     fallbackMatches, fallbackMessage);
@@ -224,8 +235,7 @@ public class ResourceMatchService {
         try {
             JsonNode root = objectMapper.readTree(response);
             JsonNode matchesNode = root.path("matches");
-            if (!matchesNode.isArray() || matchesNode.isEmpty()
-                        || matchesNode.size() != candidates.size()) {
+            if (!matchesNode.isArray() || matchesNode.size() > candidates.size()) {
                 throw new InvalidRankingException();
             }
             Map<UUID, Candidate> byId = candidates.stream()
@@ -245,8 +255,7 @@ public class ResourceMatchService {
                 }
                 ranking.add(new RankedEvidence(id, relevantNode.asBoolean(), evidence));
             }
-            if (seen.size() != candidates.size()
-                    || ranking.stream().noneMatch(RankedEvidence::relevant)) {
+            if (ranking.stream().noneMatch(RankedEvidence::relevant)) {
                 throw new InvalidRankingException();
             }
             return ranking;

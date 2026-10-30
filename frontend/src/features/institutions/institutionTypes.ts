@@ -16,6 +16,16 @@ export interface InstitutionSummary {
   logoId?: string | null;
 }
 
+export interface InstitutionDirectoryEntry {
+  id: string;
+  name: string;
+  slug: string;
+  timezone: string;
+  status: string;
+  createdAt: string;
+  logoId?: string | null;
+}
+
 export interface CreateInstitutionRequest {
   name: string;
   slug: string;

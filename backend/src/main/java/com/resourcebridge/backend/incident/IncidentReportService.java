@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -72,6 +75,58 @@ public class IncidentReportService {
     @Transactional(readOnly = true)
     public IncidentReportResponse get(UUID incidentId, String username) {
         return IncidentReportResponse.from(getAuthorizedReport(incidentId, username));
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncidentReportResponse> getMyReports(String username) {
+        AppUser user = findUser(username);
+        Set<UUID> activeMembershipIds = membershipRepository.findActiveByUserIdWithInstitution(user.getId()).stream()
+                .filter(membership -> "ACTIVE".equalsIgnoreCase(membership.getStatus()))
+                .map(Membership::getId)
+                .collect(Collectors.toSet());
+        return incidentReportRepository.findByReporterUserIdWithDetails(user.getId()).stream()
+                .filter(report -> activeMembershipIds.contains(report.getReporterMembership().getId()))
+                .map(IncidentReportResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncidentReportResponse> getInstitutionReports(UUID institutionId, String username) {
+        AppUser user = findUser(username);
+        requireAdminMembership(user.getId(), institutionId);
+        return incidentReportRepository.findByInstitutionIdWithDetails(institutionId).stream()
+                .map(IncidentReportResponse::from)
+                .toList();
+    }
+
+    @Transactional
+    public IncidentReportResponse update(UUID incidentId, UpdateIncidentReportRequest request, String username) {
+        IncidentReport report = incidentReportRepository.findByIdWithDetails(incidentId)
+                .orElseThrow(IncidentNotFoundException::new);
+        AppUser user = findUser(username);
+        Membership admin = requireAdminMembership(user.getId(), report.getInstitution().getId());
+        if (request.status() == IncidentStatus.RESOLVED || request.status() == IncidentStatus.CLOSED) {
+            if (request.resolution() == null || request.resolution().isBlank()) {
+                throw new IncidentValidationException("A resolution note is required to resolve or close a report.");
+            }
+            report.setResolvedByMembershipId(admin.getId());
+            report.setResolvedAt(java.time.Instant.now());
+        } else {
+            report.setResolvedByMembershipId(null);
+            report.setResolvedAt(null);
+        }
+        report.setStatus(request.status().name());
+        report.setResolution(request.resolution() == null || request.resolution().isBlank()
+                ? null : request.resolution().trim());
+        return IncidentReportResponse.from(incidentReportRepository.saveAndFlush(report));
+    }
+
+    private Membership requireAdminMembership(UUID userId, UUID institutionId) {
+        return membershipRepository.findByUser_IdAndInstitution_Id(userId, institutionId)
+                .filter(membership -> "ACTIVE".equalsIgnoreCase(membership.getStatus())
+                        && "ADMIN".equalsIgnoreCase(membership.getRole()))
+                .orElseThrow(() -> new IncidentAccessDeniedException(
+                        "An active administrator membership in this institution is required."));
     }
 
     private AppUser findUser(String username) {

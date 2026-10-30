@@ -35,6 +35,18 @@ public class IncidentReport {
     @Column(name = "report_text", nullable = false, columnDefinition = "text", updatable = false)
     private String reportText;
 
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = IncidentStatus.OPEN.name();
+
+    @Column(name = "resolution", columnDefinition = "text")
+    private String resolution;
+
+    @Column(name = "resolved_by_membership_id")
+    private UUID resolvedByMembershipId;
+
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
@@ -61,6 +73,38 @@ public class IncidentReport {
 
     public String getReportText() {
         return reportText;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getResolution() {
+        return resolution;
+    }
+
+    public void setResolution(String resolution) {
+        this.resolution = resolution;
+    }
+
+    public UUID getResolvedByMembershipId() {
+        return resolvedByMembershipId;
+    }
+
+    public void setResolvedByMembershipId(UUID resolvedByMembershipId) {
+        this.resolvedByMembershipId = resolvedByMembershipId;
+    }
+
+    public Instant getResolvedAt() {
+        return resolvedAt;
+    }
+
+    public void setResolvedAt(Instant resolvedAt) {
+        this.resolvedAt = resolvedAt;
     }
 
     public Instant getCreatedAt() {

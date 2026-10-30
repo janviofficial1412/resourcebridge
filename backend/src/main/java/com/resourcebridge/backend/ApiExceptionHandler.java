@@ -57,6 +57,12 @@ public class ApiExceptionHandler {
         return build(HttpStatus.FORBIDDEN, e.getMessage(), List.of());
     }
 
+    @ExceptionHandler(InstitutionService.MembershipRequestConflictException.class)
+    public ResponseEntity<ApiError> handleMembershipRequestConflict(
+            InstitutionService.MembershipRequestConflictException e) {
+        return build(HttpStatus.CONFLICT, e.getMessage(), List.of());
+    }
+
     @ExceptionHandler(ResourceService.ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleResourceNotFound(ResourceService.ResourceNotFoundException e) {
         return build(HttpStatus.NOT_FOUND, e.getMessage(), List.of());

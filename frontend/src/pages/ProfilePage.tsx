@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   UserCheck, 
   Shield, 
   Lock, 
-  Server, 
-  Key, 
   LogOut, 
-  Info,
   CheckCircle2,
   Mail,
   User as UserIcon,
@@ -39,12 +36,12 @@ export const ProfilePage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight flex items-center gap-2.5">
             <UserCheck className="h-7 w-7 text-brand-600" />
-            User Profile & Session Security
+            Your profile
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Review your academic identity, verified credentials, and active session architecture.
+            Review the account details associated with your campus community.
           </p>
         </div>
 
@@ -55,13 +52,13 @@ export const ProfilePage: React.FC = () => {
           isLoading={isLoggingOut}
           leftIcon={<LogOut className="h-4 w-4" />}
         >
-          Sign Out of Session
+          Sign out
         </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Card */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
+        <div className="bg-white border border-[#e7e5df] rounded-2xl p-6 shadow-sm space-y-6">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-2xl border-2 border-brand-200 shadow-xs">
               {userInitial}
@@ -75,7 +72,7 @@ export const ProfilePage: React.FC = () => {
               </p>
               <div className="inline-flex items-center gap-1.5 px-2 py-0.5 mt-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <CheckCircle2 className="h-3 w-3" />
-                <span>Session Active</span>
+                <span>Signed in</span>
               </div>
             </div>
           </div>
@@ -112,76 +109,56 @@ export const ProfilePage: React.FC = () => {
               </span>
             </div>
 
-            <div>
-              <span className="text-slate-400 font-medium block mb-0.5">User ID</span>
-              <span className="font-semibold text-slate-800 font-mono text-[11px]">
-                {user?.id || 'Active Session User'}
-              </span>
-            </div>
           </div>
         </div>
 
-        {/* Security & Architecture Guarantees */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
             <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
               <Shield className="h-4 w-4 text-emerald-600" />
-              Active Session Architecture
+              Your account, kept secure
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+              <div className="p-4 bg-[#f7f6f1] rounded-xl border border-slate-100 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                  <Server className="h-3.5 w-3.5 text-brand-600" />
-                  <span>Stateful Session</span>
+                  <UserCheck className="h-3.5 w-3.5 text-brand-600" />
+                  <span>Protected sign-in</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  Authenticated via Tomcat <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">JSESSIONID</code> HTTP-only cookie. No stateless JWTs used.
+                  Your account is available only after you sign in with your credentials.
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+              <div className="p-4 bg-[#f7f6f1] rounded-xl border border-slate-100 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                  <Key className="h-3.5 w-3.5 text-amber-600" />
-                  <span>CSRF Guard</span>
+                  <Shield className="h-3.5 w-3.5 text-brand-600" />
+                  <span>Safer account actions</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  CookieCsrfTokenRepository validates <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">XSRF-TOKEN</code> on all state-mutating requests.
+                  Account changes use additional protections to help prevent actions you did not intend.
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+              <div className="p-4 bg-[#f7f6f1] rounded-xl border border-slate-100 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                  <Lock className="h-3.5 w-3.5 text-indigo-600" />
-                  <span>Credential Hygiene</span>
+                  <Lock className="h-3.5 w-3.5 text-brand-600" />
+                  <span>Your credentials stay private</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  Zero session secrets or passwords in <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">localStorage</code>.
+                  Passwords and sign-in details are not shown in your profile.
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+              <div className="p-4 bg-[#f7f6f1] rounded-xl border border-slate-100 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Session Restoration</span>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
+                  <span>Pick up where you left off</span>
                 </div>
                 <p className="text-slate-500 leading-relaxed">
-                  <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono">GET /api/auth/me</code> automatically re-hydrates authenticated profile on page reload.
+                  Your sign-in is remembered securely as you move between pages.
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* Session Restoration Notice */}
-          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-5 flex items-start gap-3">
-            <Info className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="text-xs text-slate-700 space-y-1.5">
-              <p className="font-semibold text-slate-900">
-                Phase 4 Complete: Username Authentication & Session Verification
-              </p>
-              <p className="text-slate-600 leading-relaxed">
-                Login and registration use unique normalized usernames. The backend exposes <code className="bg-emerald-100/70 px-1 py-0.5 rounded font-mono text-slate-800">GET /api/auth/me</code>, which is queried on initial application mount to restore user state across browser tab refreshes without insecure local token persistence.
-              </p>
             </div>
           </div>
         </div>

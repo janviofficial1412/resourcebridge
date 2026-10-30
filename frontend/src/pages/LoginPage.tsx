@@ -7,18 +7,24 @@ import { Input } from '../components/ui/Input';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { ApiClientError } from '../services/api';
 import { SessionEstablishmentError } from '../features/auth/authSession';
+import { getPostRegistrationDestination, RegistrationIntent } from '../features/auth/registrationIntent';
 
 export const LoginPage: React.FC = () => {
-  const [username, setUsername] = useState('');
+  const location = useLocation();
+  const registrationFlow = location.state as {
+    from?: { pathname: string };
+    prefilledUsername?: string;
+    registrationIntent?: RegistrationIntent;
+  } | null;
+  const [username, setUsername] = useState(registrationFlow?.prefilledUsername ?? '');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+  const from = registrationFlow?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +43,12 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       await login({ username: trimmedUsername, password });
-      navigate(from, { replace: true });
+      if (registrationFlow?.registrationIntent) {
+        const destination = getPostRegistrationDestination(registrationFlow.registrationIntent);
+        navigate(destination.path, { replace: true, state: destination.state });
+      } else {
+        navigate(from, { replace: true });
+      }
     } catch (err: unknown) {
       if (err instanceof SessionEstablishmentError) {
         setGeneralError(err.message);
@@ -45,7 +56,7 @@ export const LoginPage: React.FC = () => {
         if (err.status === 401) {
           setGeneralError('Invalid username or password. Please verify your credentials.');
         } else if (err.status === 403) {
-          setGeneralError('Session security check failed (CSRF mismatch). Please reload the page.');
+          setGeneralError('We could not verify your sign-in request. Please refresh the page and try again.');
         } else {
           setGeneralError(err.message || 'An unexpected error occurred during login.');
         }
@@ -60,8 +71,9 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+    <div className="mx-auto max-w-md px-4 py-14 sm:py-20">
+      <div className="rounded-[1.75rem] border border-[#e7e5df] bg-white p-6 shadow-[0_24px_70px_-45px_rgba(27,56,42,0.35)] sm:p-9">
+        <div className="space-y-6">
         <div className="text-center space-y-1.5">
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 mb-2">
             <LogIn className="h-6 w-6" />
@@ -128,7 +140,8 @@ export const LoginPage: React.FC = () => {
 
         <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center gap-2 text-[11px] text-slate-500">
           <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-          <span>Spring Security session authentication (`JSESSIONID`)</span>
+          <span>Your account is protected with secure sign-in.</span>
+        </div>
         </div>
       </div>
     </div>

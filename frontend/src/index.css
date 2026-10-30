@@ -4,29 +4,79 @@
 
 @layer base {
   :root {
-    --color-primary: 12 141 233;
-    --color-primary-hover: 2 111 199;
+    color-scheme: light;
+    --color-primary: 46 104 70;
+    --color-primary-hover: 37 83 58;
+    --surface: 250 249 246;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background: #faf9f6;
   }
 
   body {
-    @apply bg-slate-50 text-slate-800 antialiased font-sans;
+    @apply bg-[#faf9f6] text-slate-800 antialiased font-sans;
+    font-feature-settings: "ss01" on, "cv11" on;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold tracking-tight text-slate-900;
+    @apply font-semibold tracking-tight text-slate-950;
+  }
+
+  ::selection {
+    background: #dcebe0;
+    color: #1b382a;
+  }
+
+  :focus-visible {
+    outline: 2px solid #3e8058;
+    outline-offset: 3px;
+  }
+
+  input, select, textarea {
+    color-scheme: light;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    border-radius: 0.75rem;
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    border-color: #3e8058;
+    outline: 2px solid #bdd8c5;
+    outline-offset: 1px;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm rounded-lg px-4 py-2 text-sm;
+    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm rounded-xl px-4 py-2 text-sm;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100 shadow-sm rounded-lg px-4 py-2 text-sm;
+    @apply inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100 shadow-sm rounded-xl px-4 py-2 text-sm;
   }
 
   .card-surface {
-    @apply bg-white border border-slate-200/80 rounded-xl shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-white border border-[#e7e5df] rounded-2xl shadow-sm transition-all duration-200 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5;
+  }
+
+  .field-control {
+    @apply rounded-xl border border-slate-300 bg-white text-slate-800 shadow-sm transition-colors placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

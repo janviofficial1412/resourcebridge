@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus, User as UserIcon, Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import {
+  UserPlus,
+  User as UserIcon,
+  Lock,
+  Mail,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
+  GraduationCap,
+  Building2,
+} from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { RegistrationIntent } from '../features/auth/registrationIntent';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -13,6 +24,7 @@ export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [registrationIntent, setRegistrationIntent] = useState<RegistrationIntent>('STUDENT');
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -89,7 +101,12 @@ export const RegisterPage: React.FC = () => {
 
       setRegistrationSuccess(true);
       setTimeout(() => {
-        navigate('/login', { state: { prefilledUsername: username.trim().toLowerCase() } });
+        navigate('/login', {
+          state: {
+            prefilledUsername: username.trim().toLowerCase(),
+            registrationIntent,
+          },
+        });
       }, 1500);
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
@@ -125,8 +142,9 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-12 sm:py-16">
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+    <div className="mx-auto max-w-md px-4 py-10 sm:py-16">
+      <div className="rounded-[1.75rem] border border-[#e7e5df] bg-white p-6 shadow-[0_24px_70px_-45px_rgba(27,56,42,0.35)] sm:p-9">
+        <div className="space-y-6">
         <div className="text-center space-y-1.5">
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-brand-50 text-brand-600 mb-2">
             <UserPlus className="h-6 w-6" />
@@ -156,6 +174,52 @@ export const RegisterPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold text-slate-800">How will you use ResourceBridge?</legend>
+            <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition-colors ${
+              registrationIntent === 'STUDENT'
+                ? 'border-brand-500 bg-brand-50/60'
+                : 'border-slate-200 hover:border-brand-200'
+            }`}>
+              <input
+                type="radio"
+                name="registrationIntent"
+                value="STUDENT"
+                checked={registrationIntent === 'STUDENT'}
+                onChange={() => setRegistrationIntent('STUDENT')}
+                className="mt-1 accent-brand-700"
+              />
+              <GraduationCap className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" aria-hidden />
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">General user (Student)</span>
+                <span className="mt-0.5 block text-xs text-slate-600">
+                  Find an institution and request membership to discover and book resources.
+                </span>
+              </span>
+            </label>
+            <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition-colors ${
+              registrationIntent === 'ADMIN'
+                ? 'border-brand-500 bg-brand-50/60'
+                : 'border-slate-200 hover:border-brand-200'
+            }`}>
+              <input
+                type="radio"
+                name="registrationIntent"
+                value="ADMIN"
+                checked={registrationIntent === 'ADMIN'}
+                onChange={() => setRegistrationIntent('ADMIN')}
+                className="mt-1 accent-brand-700"
+              />
+              <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" aria-hidden />
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">Institution Administrator</span>
+                <span className="mt-0.5 block text-xs text-slate-600">
+                  Create an institution to become its initial administrator. This choice grants no access by itself.
+                </span>
+              </span>
+            </label>
+          </fieldset>
+
           <Input
             id="reg-username"
             name="username"
@@ -226,7 +290,7 @@ export const RegisterPage: React.FC = () => {
             placeholder="••••••••"
             required
             error={fieldErrors.password}
-            helperText="Minimum 8 characters (max 72 UTF-8 bytes for BCrypt)."
+            helperText="Use at least 8 characters."
             leftIcon={<Lock className="h-4 w-4" />}
           />
 
@@ -270,7 +334,8 @@ export const RegisterPage: React.FC = () => {
 
         <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center gap-2 text-[11px] text-slate-500">
           <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-          <span>CSRF-exempt registration endpoint, BCrypt password hashing</span>
+          <span>Your sign-in details are handled securely.</span>
+        </div>
         </div>
       </div>
     </div>

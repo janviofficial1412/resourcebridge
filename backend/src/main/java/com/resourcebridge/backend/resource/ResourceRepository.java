@@ -36,6 +36,15 @@ public interface ResourceRepository extends JpaRepository<Resource, UUID> {
             "JOIN FETCH r.institution " +
             "JOIN FETCH r.category " +
             "JOIN FETCH r.ownerMembership m " +
+            "JOIN FETCH m.user " +
+            "WHERE r.institution.id = :institutionId " +
+            "ORDER BY r.createdAt DESC")
+    List<Resource> findByInstitutionIdWithDetails(@Param("institutionId") UUID institutionId);
+
+    @Query("SELECT r FROM Resource r " +
+            "JOIN FETCH r.institution " +
+            "JOIN FETCH r.category " +
+            "JOIN FETCH r.ownerMembership m " +
             "JOIN FETCH m.user u " +
             "WHERE u.id = :userId " +
             "ORDER BY r.createdAt DESC")
@@ -80,4 +89,17 @@ public interface ResourceRepository extends JpaRepository<Resource, UUID> {
     long countByOwnerMembership_User_Id(UUID userId);
 
     long countByInstitution_IdAndOwnerMembership_User_Id(UUID institutionId, UUID userId);
+
+    long countByInstitution_Id(UUID institutionId);
+
+    long countByInstitution_IdAndStatus(UUID institutionId, ResourceStatus status);
+
+    @Query("SELECT COUNT(r) FROM Resource r " +
+            "JOIN r.ownerMembership owner " +
+            "JOIN r.institution institution " +
+            "WHERE r.institution.id = :institutionId " +
+            "AND r.status = com.resourcebridge.backend.resource.ResourceStatus.AVAILABLE " +
+            "AND institution.status = 'ACTIVE' AND owner.status = 'ACTIVE' " +
+            "AND owner.user.id <> :userId")
+    long countDiscoverableForMember(@Param("institutionId") UUID institutionId, @Param("userId") UUID userId);
 }

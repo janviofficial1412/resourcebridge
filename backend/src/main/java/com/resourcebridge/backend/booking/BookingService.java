@@ -85,6 +85,9 @@ public class BookingService {
         if (!"ACTIVE".equalsIgnoreCase(requesterMembership.getStatus())) {
             throw new BookingAccessDeniedException("Your membership in this institution is not active");
         }
+        if (!"MEMBER".equalsIgnoreCase(requesterMembership.getRole())) {
+            throw new BookingAccessDeniedException("Only active student members can request bookings");
+        }
 
         // Check for active (PENDING or CONFIRMED) booking conflicts
         if (bookingRepository.countOverlappingActiveBookings(resource.getId(), command.startTime(), command.endTime(), null) > 0) {
@@ -125,13 +128,11 @@ public class BookingService {
 
         boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId())
                 && isActive(booking.getRequesterMembership());
-        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId())
-                && isActive(booking.getResource().getOwnerMembership());
         boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
                 .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                 .isPresent();
 
-        if (!isRequester && !isOwner && !isAdmin) {
+        if (!isRequester && !isAdmin) {
             throw new BookingAccessDeniedException("You do not have permission to view this booking");
         }
 
@@ -146,16 +147,50 @@ public class BookingService {
             boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institutionId)
                     .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                     .isPresent();
-
             if (!isAdmin) {
                 throw new BookingAccessDeniedException("You do not have administrative access to this institution");
             }
             return bookingRepository.findIncomingByInstitutionIdAndStatusWithDetails(institutionId, status);
         }
 
-        return bookingRepository.findIncomingByOwnerUserIdAndStatusWithDetails(user.getId(), status).stream()
-                .filter(booking -> isActive(booking.getResource().getOwnerMembership()))
+        return membershipRepository.findActiveByUserIdWithInstitution(user.getId()).stream()
+                .filter(membership -> "ADMIN".equalsIgnoreCase(membership.getRole()))
+                .map(Membership::getInstitution)
+                .map(institution -> bookingRepository.findIncomingByInstitutionIdAndStatusWithDetails(
+                        institution.getId(), status))
+                .flatMap(List::stream)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Booking> getResourceBookingHistory(UUID resourceId, String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        Resource resource = resourceRepository.findByIdWithDetails(resourceId)
+                .orElseThrow(() -> new ResourceService.ResourceNotFoundException(
+                        "Resource not found with ID: " + resourceId));
+        membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), resource.getInstitution().getId())
+                .filter(membership -> isActive(membership) && "ADMIN".equalsIgnoreCase(membership.getRole()))
+                .orElseThrow(() -> new BookingAccessDeniedException(
+                        "Only an active institution administrator can view resource booking history"));
+        return bookingRepository.findByResourceIdWithDetails(resourceId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Booking> getMemberBookingHistory(
+            UUID institutionId, UUID membershipId, String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institutionId)
+                .filter(membership -> isActive(membership) && "ADMIN".equalsIgnoreCase(membership.getRole()))
+                .orElseThrow(() -> new BookingAccessDeniedException(
+                        "Only an active institution administrator can view member booking history"));
+
+        Membership targetMembership = membershipRepository.findByIdAndInstitution_Id(membershipId, institutionId)
+                .filter(membership -> "MEMBER".equalsIgnoreCase(membership.getRole()))
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Student membership not found in this institution"));
+
+        return bookingRepository.findByInstitutionIdAndRequesterMembershipIdWithDetails(
+                institutionId, targetMembership.getId());
     }
 
     @Transactional
@@ -205,12 +240,14 @@ public class BookingService {
                     "Only PENDING bookings can be rejected. Current status: " + booking.getStatus());
         }
 
+        if (decisionMessage == null || decisionMessage.isBlank()) {
+            throw new BookingValidationException("A reason is required to reject a booking");
+        }
+
         booking.setStatus(BookingStatus.REJECTED);
         booking.setDecidedByMembership(deciderMembership);
         booking.setDecidedAt(Instant.now());
-        if (decisionMessage != null && !decisionMessage.isBlank()) {
-            booking.setDecisionMessage(decisionMessage.trim());
-        }
+        booking.setDecisionMessage(decisionMessage.trim());
 
         return bookingRepository.saveAndFlush(booking);
     }
@@ -224,13 +261,11 @@ public class BookingService {
 
         boolean isRequester = booking.getRequesterMembership().getUser().getId().equals(user.getId())
                 && isActive(booking.getRequesterMembership());
-        boolean isOwner = booking.getResource().getOwnerMembership().getUser().getId().equals(user.getId())
-                && isActive(booking.getResource().getOwnerMembership());
         boolean isAdmin = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
                 .filter(m -> isActive(m) && "ADMIN".equalsIgnoreCase(m.getRole()))
                 .isPresent();
 
-        if (!isRequester && !isOwner && !isAdmin) {
+        if (!isRequester && !isAdmin) {
             throw new BookingAccessDeniedException("You do not have permission to cancel this booking");
         }
 
@@ -270,21 +305,16 @@ public class BookingService {
     }
 
     private Membership verifyCanDecideBooking(AppUser user, Booking booking) {
-        Membership ownerMembership = booking.getResource().getOwnerMembership();
-        boolean isOwner = ownerMembership.getUser().getId().equals(user.getId());
         Membership membership = membershipRepository
                 .findByUser_IdAndInstitution_Id(user.getId(), booking.getInstitution().getId())
                 .filter(BookingService::isActive)
                 .orElseThrow(() -> new BookingAccessDeniedException(
                         "An active membership in this institution is required"));
 
-        if (isOwner && ownerMembership.getId().equals(membership.getId())) {
-            return membership;
-        }
         if ("ADMIN".equalsIgnoreCase(membership.getRole())) {
             return membership;
         }
-        throw new BookingAccessDeniedException("You do not have permission to decide this booking");
+        throw new BookingAccessDeniedException("Only an active institution administrator can decide bookings");
     }
 
     private static boolean isActive(Membership membership) {

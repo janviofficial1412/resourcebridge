@@ -66,6 +66,26 @@ public class BookingController {
         return bookings.stream().map(BookingResponse::from).toList();
     }
 
+    @GetMapping("/resource/{resourceId}")
+    public List<BookingResponse> getResourceBookingHistory(@PathVariable UUID resourceId,
+                                                           Authentication authentication) {
+        String username = getAuthenticatedUsername(authentication);
+        return bookingService.getResourceBookingHistory(resourceId, username).stream()
+                .map(BookingResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/institution/{institutionId}/member/{membershipId}")
+    public List<BookingResponse> getMemberBookingHistory(
+            @PathVariable UUID institutionId,
+            @PathVariable UUID membershipId,
+            Authentication authentication) {
+        String username = getAuthenticatedUsername(authentication);
+        return bookingService.getMemberBookingHistory(institutionId, membershipId, username).stream()
+                .map(BookingResponse::from)
+                .toList();
+    }
+
     @PostMapping("/{id}/approve")
     public BookingResponse approveBooking(@PathVariable UUID id,
                                           @Valid @RequestBody(required = false) DecisionRequest request,

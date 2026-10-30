@@ -319,7 +319,7 @@ export const ResourceDetailPage: React.FC = () => {
       </div>
 
       {/* Header card */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-sm">
+      <div className="card-surface p-6 sm:p-8">
         <ResourcePhoto
           imageId={resource.imageId}
           alt={`${resource.name} photo`}
@@ -368,7 +368,7 @@ export const ResourceDetailPage: React.FC = () => {
         {/* Description & Booking Request (wider) */}
         <div className="lg:col-span-2 space-y-6">
           {/* Description */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
+          <div className="card-surface p-6">
             <h2 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
               <FileText className="h-4 w-4 text-slate-400" aria-hidden />
               Description
@@ -379,7 +379,7 @@ export const ResourceDetailPage: React.FC = () => {
           </div>
 
           {/* Booking policy */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
+          <div className="card-surface p-6">
             <h2 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
               <Clock className="h-4 w-4 text-slate-400" aria-hidden />
               Booking Policy
@@ -426,7 +426,7 @@ export const ResourceDetailPage: React.FC = () => {
           </div>
 
           {/* ── Booking Request Form Section ── */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
+          <div className="card-surface p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                 <CalendarCheck className="h-4 w-4 text-brand-600" aria-hidden />
@@ -621,7 +621,7 @@ export const ResourceDetailPage: React.FC = () => {
 
         {/* Metadata sidebar */}
         <div className="lg:col-span-1">
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
+          <div className="card-surface p-6">
             <h2 className="text-sm font-bold text-slate-800 mb-1">Resource Details</h2>
             <p className="text-[11px] text-slate-400 mb-4">All information provided by the resource owner</p>
 

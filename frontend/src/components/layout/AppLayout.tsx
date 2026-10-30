@@ -1,84 +1,61 @@
 import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Navbar } from './Navbar';
-import { Shield, BookOpen, GitBranch } from 'lucide-react';
+import { Layers, ArrowUpRight, ShieldCheck } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+    <div className="min-h-screen flex flex-col bg-[#faf9f6] text-slate-800">
       <Navbar />
 
       <main className="flex-grow">
         <Outlet />
       </main>
 
-      <footer className="bg-white border-t border-slate-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="space-y-3 md:col-span-1">
-              <span className="font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                ResourceBridge
-              </span>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Empowering university students, researchers, and faculty to share institutional laboratory equipment, makerspace machinery, and study facilities within trusted academic boundaries.
+      <footer className="mt-20 border-t border-[#e7e5df] bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-4">
+            <div className="space-y-4 md:col-span-2">
+              <Link to="/" className="inline-flex items-center gap-3 rounded-lg focus-visible:ring-2 focus-visible:ring-brand-500">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-800 text-white"><Layers className="h-5 w-5" /></span>
+                <span className="font-semibold tracking-tight text-slate-900">ResourceBridge</span>
+              </Link>
+              <p className="max-w-md text-sm leading-6 text-slate-600">
+                Make more of the tools, spaces and expertise already present across your academic community.
               </p>
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">
-                Platform
-              </h4>
-              <ul className="space-y-2 text-xs text-slate-600">
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Explore</h4>
+              <ul className="space-y-3 text-sm text-slate-600">
                 <li>
-                  <Link to="/discover" className="hover:text-brand-600">Discover Equipment</Link>
+                  <Link to="/discover" className="inline-flex items-center gap-1 hover:text-brand-700">Discover resources <ArrowUpRight className="h-3.5 w-3.5" /></Link>
                 </li>
                 <li>
-                  <Link to="/institutions" className="hover:text-brand-600">Partner Campuses</Link>
+                  <Link to="/institutions" className="hover:text-brand-700">Institutions</Link>
                 </li>
                 <li>
-                  <Link to="/register" className="hover:text-brand-600">Student Access</Link>
+                  <Link to="/register" className="hover:text-brand-700">Create an account</Link>
                 </li>
               </ul>
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">
-                Security & Compliance
-              </h4>
-              <ul className="space-y-2 text-xs text-slate-600">
-                <li className="flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Session & CSRF Protection</span>
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Built on trust</h4>
+              <ul className="space-y-3 text-sm text-slate-600">
+                <li className="flex items-center gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-brand-600" />
+                  <span>Institution-scoped access</span>
                 </li>
-                <li className="flex items-center gap-1.5">
-                  <BookOpen className="h-3.5 w-3.5 text-brand-600" />
-                  <span>PostgreSQL Audit Triggers</span>
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <GitBranch className="h-3.5 w-3.5 text-indigo-600" />
-                  <span>Tenant Isolation Enforced</span>
-                </li>
+                <li>Thoughtful, accountable sharing</li>
+                <li>Resources across your institutions</li>
               </ul>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">
-                Hackathon Project
-              </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-2">
-                Built with Spring Boot 4, PostgreSQL, React, TypeScript, and Tailwind CSS.
-              </p>
-              <div className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                <span>Designed for modern campuses</span>
-              </div>
             </div>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400">
+          <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-slate-100 pt-6 text-xs text-slate-500 sm:flex-row">
             <p>© {new Date().getFullYear()} ResourceBridge. All rights reserved.</p>
-            <p className="mt-2 sm:mt-0 flex items-center gap-1">
-              <span>Institution-grade resource sharing</span>
-            </p>
+            <p>Shared resources. Stronger academic communities.</p>
           </div>
         </div>
       </footer>

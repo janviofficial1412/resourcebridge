@@ -47,6 +47,21 @@ export const bookingService = {
     return api.get<BookingResponse[]>(`/api/bookings/incoming${query}`);
   },
 
+  getResourceHistory: async (resourceId: string): Promise<BookingResponse[]> => {
+    return api.get<BookingResponse[]>(
+      `/api/bookings/resource/${encodeURIComponent(resourceId)}`
+    );
+  },
+
+  getMemberHistory: async (
+    institutionId: string,
+    membershipId: string
+  ): Promise<BookingResponse[]> => {
+    return api.get<BookingResponse[]>(
+      `/api/bookings/institution/${encodeURIComponent(institutionId)}/member/${encodeURIComponent(membershipId)}`
+    );
+  },
+
   /**
    * Approve a pending booking request.
    */

@@ -78,8 +78,9 @@ class ImageAssetServiceTest {
     void uploadsDecodedImageAndPersistsOpaqueMetadataReference() throws Exception {
         byte[] imageBytes = pngImage();
         when(resourceRepository.findByIdWithDetails(resource.getId())).thenReturn(Optional.of(resource));
+        Membership admin = activeAdmin();
         when(membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institution.getId()))
-                .thenReturn(Optional.of(member));
+                .thenReturn(Optional.of(admin));
         when(imageAssetRepository.findByResource_Id(resource.getId())).thenReturn(Optional.empty());
         when(imageAssetRepository.saveAndFlush(any(ImageAsset.class))).thenAnswer(invocation -> {
             ImageAsset saved = invocation.getArgument(0);
@@ -112,8 +113,9 @@ class ImageAssetServiceTest {
         LocalImageStorage storage = new LocalImageStorage(storageDirectory.toString());
         storage.store(oldStorageKey, new byte[]{1});
         when(resourceRepository.findByIdWithDetails(resource.getId())).thenReturn(Optional.of(resource));
+        Membership admin = activeAdmin();
         when(membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institution.getId()))
-                .thenReturn(Optional.of(member));
+                .thenReturn(Optional.of(admin));
         when(imageAssetRepository.findByResource_Id(resource.getId())).thenReturn(Optional.of(existing));
         when(imageAssetRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -281,7 +283,7 @@ class ImageAssetServiceTest {
     }
 
     @Test
-    void activeOwnerCanRemovePhotoAndStoredFile() throws Exception {
+    void activeInstitutionAdminCanRemovePhotoAndStoredFile() throws Exception {
         String storageKey = "c".repeat(64) + ".png";
         ImageAsset asset = new ImageAsset(storageKey, "image/png", 1,
                 1, 1, resource, null, user.getId());
@@ -289,8 +291,9 @@ class ImageAssetServiceTest {
         LocalImageStorage storage = new LocalImageStorage(storageDirectory.toString());
         storage.store(storageKey, new byte[]{1});
         when(resourceRepository.findByIdWithDetails(resource.getId())).thenReturn(Optional.of(resource));
+        Membership admin = activeAdmin();
         when(membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institution.getId()))
-                .thenReturn(Optional.of(member));
+                .thenReturn(Optional.of(admin));
         when(imageAssetRepository.findByResource_Id(resource.getId())).thenReturn(Optional.of(asset));
 
         service.removeResourceImage(resource.getId(), "owner");
@@ -315,8 +318,9 @@ class ImageAssetServiceTest {
     @Test
     void removingPhotoFromResourceWithoutPhotoIsSafe() {
         when(resourceRepository.findByIdWithDetails(resource.getId())).thenReturn(Optional.of(resource));
+        Membership admin = activeAdmin();
         when(membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institution.getId()))
-                .thenReturn(Optional.of(member));
+                .thenReturn(Optional.of(admin));
         when(imageAssetRepository.findByResource_Id(resource.getId())).thenReturn(Optional.empty());
 
         service.removeResourceImage(resource.getId(), "owner");
@@ -329,6 +333,12 @@ class ImageAssetServiceTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ImageIO.write(image, "png", output);
         return output.toByteArray();
+    }
+
+    private Membership activeAdmin() {
+        Membership admin = new Membership(user, institution, "ADMIN", "ACTIVE", Instant.now());
+        ReflectionTestUtils.setField(admin, "id", UUID.randomUUID());
+        return admin;
     }
 
     private static byte[] jpegImage() throws Exception {

@@ -8,6 +8,9 @@ export interface IncidentReport {
   reporterName: string;
   reportText: string;
   createdAt: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  resolution: string | null;
+  resolvedAt: string | null;
 }
 
 export interface IncidentSummary {
@@ -24,6 +27,16 @@ export interface IncidentSummary {
 }
 
 export const incidentService = {
+  listMyReports(): Promise<IncidentReport[]> {
+    return api.get<IncidentReport[]>('/api/incidents/mine');
+  },
+
+  listInstitutionReports(institutionId: string): Promise<IncidentReport[]> {
+    return api.get<IncidentReport[]>(
+      `/api/institutions/${encodeURIComponent(institutionId)}/incidents`
+    );
+  },
+
   create(institutionId: string, reportText: string): Promise<IncidentReport> {
     return api.post<IncidentReport>(
       `/api/institutions/${encodeURIComponent(institutionId)}/incidents`,
@@ -40,5 +53,12 @@ export const incidentService = {
       `/api/incidents/${encodeURIComponent(incidentId)}/summary`,
       {}
     );
+  },
+
+  update(incidentId: string, status: IncidentReport['status'], resolution: string): Promise<IncidentReport> {
+    return api.put<IncidentReport>(`/api/incidents/${encodeURIComponent(incidentId)}`, {
+      status,
+      resolution,
+    });
   },
 };

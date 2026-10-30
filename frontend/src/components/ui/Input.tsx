@@ -40,7 +40,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-xs font-semibold text-slate-700 tracking-wide"
+            className="block text-sm font-medium text-slate-700"
           >
             {label}
             {required && <span className="text-red-500 ml-1" aria-hidden="true">*</span>}
@@ -66,12 +66,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             }
             className={twMerge(
               clsx(
-                'block w-full rounded-lg border text-sm transition-colors',
+                'block w-full rounded-xl border text-sm transition-colors',
                 'placeholder:text-slate-400',
                 'focus:outline-none focus:ring-2 focus:ring-offset-0',
                 leftIcon ? 'pl-10' : 'pl-3.5',
                 isPassword ? 'pr-10' : 'pr-3.5',
-                'py-2',
+                'py-2.5',
                 error
                   ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-200 bg-red-50/30'
                   : 'border-slate-300 text-slate-900 focus:border-brand-500 focus:ring-brand-100 bg-white hover:border-slate-400',
@@ -86,9 +86,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none focus:text-slate-700"
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
-              tabIndex={-1}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4" />

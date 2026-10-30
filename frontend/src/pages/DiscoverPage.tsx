@@ -79,12 +79,12 @@ function ConditionBadge({ condition }: { condition: ConditionRating }) {
 
 function ResourceCard({ resource }: { resource: ResourceResponse }) {
   return (
-    <article className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:border-brand-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+    <article className="group flex flex-col justify-between space-y-4 rounded-2xl border border-[#e7e5df] bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5">
       <div className="space-y-3">
         <ResourcePhoto
           imageId={resource.imageId}
           alt={`${resource.name} photo`}
-          className="h-40 w-full rounded-xl object-cover"
+          className="h-48 w-full rounded-xl object-cover"
         />
         {/* Badges */}
         <div className="flex items-center justify-between gap-2">
@@ -99,7 +99,7 @@ function ResourceCard({ resource }: { resource: ResourceResponse }) {
 
         {/* Title & description */}
         <div>
-          <h3 className="text-base font-bold text-slate-900 group-hover:text-brand-600 transition-colors line-clamp-1">
+          <h3 className="text-base font-semibold text-slate-900 group-hover:text-brand-700 transition-colors line-clamp-1">
             {resource.name}
           </h3>
           <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
@@ -484,9 +484,9 @@ export const DiscoverPage: React.FC = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>Phase 6.1 · Discovery API Active</span>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 mb-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-600" />
+            <span>Find a resource for your work</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Compass className="h-7 w-7 text-brand-600" aria-hidden />
@@ -509,7 +509,7 @@ export const DiscoverPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs space-y-4">
+      <div className="rounded-2xl border border-[#e7e5df] bg-white p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
           <SlidersHorizontal className="h-4 w-4 text-slate-400" aria-hidden />
           <span>Filter Resources</span>
@@ -691,15 +691,16 @@ export const DiscoverPage: React.FC = () => {
       {/* Natural-language matching */}
       {institutions.length > 0 && (
         <form
+          id="matching"
           onSubmit={handleResourceMatch}
-          className="rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-4 shadow-xs space-y-3"
+          className="rounded-2xl border border-brand-200/80 bg-gradient-to-br from-brand-50 via-white to-[#f3e8e1]/40 p-5 shadow-sm space-y-3"
         >
           <div className="flex items-start gap-2">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden />
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Describe what you need</h2>
               <p className="mt-0.5 text-xs text-slate-600">
-                Local AI ranks eligible resources from your active institutions. Existing filters still apply.
+                Tell us what you are looking for and see relevant resources from your active institutions. Existing filters still apply.
               </p>
             </div>
           </div>

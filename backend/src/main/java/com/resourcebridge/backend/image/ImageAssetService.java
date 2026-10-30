@@ -229,11 +229,9 @@ public class ImageAssetService {
 
     private void authorizeResourceImageManagement(AppUser user, Resource resource) {
         Membership membership = getActiveMembership(user, resource.getInstitution());
-        boolean owner = resource.getOwnerMembership() != null
-                && membership.getId().equals(resource.getOwnerMembership().getId());
-        boolean admin = "ADMIN".equalsIgnoreCase(membership.getRole());
-        if (!owner && !admin) {
-            throw new ImageAccessDeniedException("Only the active resource owner or an institution administrator can manage this image");
+        if (!"ADMIN".equalsIgnoreCase(membership.getRole())) {
+            throw new ImageAccessDeniedException(
+                    "Only an active institution administrator can manage resource images");
         }
     }
 

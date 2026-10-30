@@ -120,6 +120,104 @@ public class InstitutionService {
     }
 
     @Transactional(readOnly = true)
+    public List<InstitutionSummaryResponse> listMyMemberships(String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        return membershipRepository.findByUserIdWithInstitution(user.getId()).stream()
+                .map(membership -> {
+                    Institution institution = membership.getInstitution();
+                    return new InstitutionSummaryResponse(
+                            institution.getId(),
+                            institution.getName(),
+                            institution.getSlug(),
+                            institution.getTimezone(),
+                            institution.getStatus(),
+                            membership.getRole(),
+                            membership.getStatus(),
+                            institution.getCreatedAt(),
+                            null);
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<InstitutionDirectoryResponse> listDirectory() {
+        return institutionRepository.findByStatusOrderByNameAsc("ACTIVE").stream()
+                .map(institution -> new InstitutionDirectoryResponse(
+                        institution.getId(),
+                        institution.getName(),
+                        institution.getSlug(),
+                        institution.getTimezone(),
+                        institution.getStatus(),
+                        institution.getCreatedAt(),
+                        null))
+                .toList();
+    }
+
+    @Transactional
+    public MemberResponse requestMembership(UUID institutionId, String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        Institution institution = institutionRepository.findById(institutionId)
+                .orElseThrow(InstitutionNotFoundException::new);
+        if (!"ACTIVE".equalsIgnoreCase(institution.getStatus())) {
+            throw new InstitutionAccessDeniedException("This institution is not accepting membership requests");
+        }
+
+        Membership membership = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institutionId)
+                .orElse(null);
+        if (membership == null) {
+            membership = new Membership(user, institution, "MEMBER", "PENDING", null);
+        } else if ("REJECTED".equalsIgnoreCase(membership.getStatus())) {
+            membership.setStatus("PENDING");
+            membership.setVerifiedByMembershipId(null);
+            membership.setVerifiedAt(null);
+        } else {
+            throw new MembershipRequestConflictException(
+                    "A membership already exists for this institution with status " + membership.getStatus());
+        }
+        return toMemberResponse(membershipRepository.saveAndFlush(membership));
+    }
+
+    @Transactional
+    public MemberResponse approveMembership(UUID institutionId, UUID membershipId, String currentUsername) {
+        Membership admin = requireInstitutionAdmin(institutionId, currentUsername);
+        Membership requested = getMembership(institutionId, membershipId);
+        if (!"PENDING".equalsIgnoreCase(requested.getStatus())
+                || !"MEMBER".equalsIgnoreCase(requested.getRole())) {
+            throw new MembershipRequestConflictException("Only pending student membership requests can be approved");
+        }
+        requested.setStatus("ACTIVE");
+        requested.setVerifiedByMembershipId(admin.getId());
+        requested.setVerifiedAt(Instant.now());
+        return toMemberResponse(membershipRepository.saveAndFlush(requested));
+    }
+
+    @Transactional
+    public MemberResponse rejectMembership(UUID institutionId, UUID membershipId, String currentUsername) {
+        Membership admin = requireInstitutionAdmin(institutionId, currentUsername);
+        Membership requested = getMembership(institutionId, membershipId);
+        if (!"PENDING".equalsIgnoreCase(requested.getStatus())
+                || !"MEMBER".equalsIgnoreCase(requested.getRole())) {
+            throw new MembershipRequestConflictException("Only pending student membership requests can be rejected");
+        }
+        requested.setStatus("REJECTED");
+        requested.setVerifiedByMembershipId(admin.getId());
+        requested.setVerifiedAt(null);
+        return toMemberResponse(membershipRepository.saveAndFlush(requested));
+    }
+
+    @Transactional
+    public MemberResponse deactivateMembership(UUID institutionId, UUID membershipId, String currentUsername) {
+        requireInstitutionAdmin(institutionId, currentUsername);
+        Membership target = getMembership(institutionId, membershipId);
+        if (!"ACTIVE".equalsIgnoreCase(target.getStatus())
+                || !"MEMBER".equalsIgnoreCase(target.getRole())) {
+            throw new MembershipRequestConflictException("Only active student memberships can be deactivated");
+        }
+        target.setStatus("SUSPENDED");
+        return toMemberResponse(membershipRepository.saveAndFlush(target));
+    }
+
+    @Transactional(readOnly = true)
     public InstitutionDetailResponse getInstitutionDetails(UUID institutionId, String currentUsername) {
         AppUser user = getAuthenticatedUser(currentUsername);
 
@@ -131,7 +229,7 @@ public class InstitutionService {
         }
 
         Institution institution = membership.getInstitution();
-        long memberCount = membershipRepository.countByInstitution_Id(institutionId);
+        long memberCount = membershipRepository.countActiveByInstitutionId(institutionId);
 
         return new InstitutionDetailResponse(
                 institution.getId(),
@@ -158,19 +256,42 @@ public class InstitutionService {
             throw new InstitutionAccessDeniedException("Membership is not active");
         }
 
-        List<Membership> members = membershipRepository.findByInstitutionIdWithUser(institutionId);
-
-        return members.stream()
-                .map(m -> new MemberResponse(
-                        m.getId(),
-                        m.getUser().getUsername(),
-                        m.getUser().getFullName(),
-                        m.getRole(),
-                        m.getStatus(),
-                        m.getVerifiedAt(),
-                        m.getCreatedAt()
-                ))
+        List<Membership> members = membershipRepository.findByInstitutionIdWithUser(institutionId).stream()
+                .filter(member -> "ADMIN".equalsIgnoreCase(currentMembership.getRole())
+                        || "ACTIVE".equalsIgnoreCase(member.getStatus()))
                 .toList();
+
+        return members.stream().map(InstitutionService::toMemberResponse).toList();
+    }
+
+    private Membership requireInstitutionAdmin(UUID institutionId, String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        Membership membership = membershipRepository.findByUser_IdAndInstitution_Id(user.getId(), institutionId)
+                .filter(value -> "ACTIVE".equalsIgnoreCase(value.getStatus())
+                        && "ADMIN".equalsIgnoreCase(value.getRole()))
+                .orElseThrow(() -> new InstitutionAccessDeniedException(
+                        "An active administrator membership in this institution is required"));
+        return membership;
+    }
+
+    private Membership getMembership(UUID institutionId, UUID membershipId) {
+        Membership target = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new InstitutionNotFoundException("Membership not found"));
+        if (!target.getInstitution().getId().equals(institutionId)) {
+            throw new InstitutionNotFoundException("Membership not found");
+        }
+        return target;
+    }
+
+    private static MemberResponse toMemberResponse(Membership membership) {
+        return new MemberResponse(
+                membership.getId(),
+                membership.getUser().getUsername(),
+                membership.getUser().getFullName(),
+                membership.getRole(),
+                membership.getStatus(),
+                membership.getVerifiedAt(),
+                membership.getCreatedAt());
     }
 
     private AppUser getAuthenticatedUser(String username) {
@@ -218,6 +339,12 @@ public class InstitutionService {
         }
 
         public InstitutionAccessDeniedException(String message) {
+            super(message);
+        }
+    }
+
+    public static class MembershipRequestConflictException extends RuntimeException {
+        public MembershipRequestConflictException(String message) {
             super(message);
         }
     }

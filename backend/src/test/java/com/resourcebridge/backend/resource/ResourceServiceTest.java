@@ -110,8 +110,9 @@ class ResourceServiceTest {
         );
 
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        Membership adminMembership = new Membership(scholarJane, apexLab, "ADMIN", "ACTIVE", Instant.now());
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
-                .thenReturn(Optional.of(janeMembership));
+                .thenReturn(Optional.of(adminMembership));
         when(resourceCategoryRepository.findById(categoryId)).thenReturn(Optional.of(microscopeCategory));
 
         Resource savedResource = new Resource(
@@ -148,7 +149,7 @@ class ResourceServiceTest {
         verify(resourceRepository).saveAndFlush(resourceCaptor.capture());
         Resource captured = resourceCaptor.getValue();
         assertEquals(apexLab, captured.getInstitution());
-        assertEquals(janeMembership, captured.getOwnerMembership());
+        assertEquals(adminMembership, captured.getOwnerMembership());
         assertEquals(microscopeCategory, captured.getCategory());
     }
 
@@ -205,7 +206,7 @@ class ResourceServiceTest {
                 ResourceService.ResourceAccessDeniedException.class,
                 () -> resourceService.createResource(command, "colleague_bob")
         );
-        assertTrue(ex.getMessage().contains("Borrowers cannot register resources"));
+        assertTrue(ex.getMessage().contains("Only an active institution administrator"));
     }
 
     @Test
@@ -228,8 +229,9 @@ class ResourceServiceTest {
         );
 
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
+        Membership adminMembership = new Membership(scholarJane, apexLab, "ADMIN", "ACTIVE", Instant.now());
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), institutionId))
-                .thenReturn(Optional.of(janeMembership));
+                .thenReturn(Optional.of(adminMembership));
         when(resourceCategoryRepository.findById(foreignCategory.getId())).thenReturn(Optional.of(foreignCategory));
 
         ResourceService.ResourceValidationException ex = assertThrows(
@@ -272,7 +274,7 @@ class ResourceServiceTest {
                 ResourceService.ResourceAccessDeniedException.class,
                 () -> resourceService.updateResource(resourceId, updateCommand, "colleague_bob")
         );
-        assertTrue(ex.getMessage().contains("do not have permission"));
+        assertTrue(ex.getMessage().contains("active administrator"));
     }
 
     @Test
@@ -359,7 +361,7 @@ class ResourceServiceTest {
     }
 
     @Test
-    void resourceOwnerCanUpdateOwnResource() {
+    void institutionAdminCanManageLegacyMemberOwnedResourceWithoutReassigningIt() {
         UUID resourceId = UUID.randomUUID();
         Resource existingResource = new Resource(
                 apexLab,
@@ -371,8 +373,9 @@ class ResourceServiceTest {
 
         when(appUserRepository.findByUsername("scholar_jane")).thenReturn(Optional.of(scholarJane));
         when(resourceRepository.findById(resourceId)).thenReturn(Optional.of(existingResource));
+        Membership adminMembership = new Membership(scholarJane, apexLab, "ADMIN", "ACTIVE", Instant.now());
         when(membershipRepository.findByUser_IdAndInstitution_Id(scholarJane.getId(), apexLab.getId()))
-                .thenReturn(Optional.of(janeMembership));
+                .thenReturn(Optional.of(adminMembership));
         when(resourceRepository.saveAndFlush(any(Resource.class))).thenReturn(existingResource);
 
         ResourceService.UpdateResourceCommand updateCommand = new ResourceService.UpdateResourceCommand(
@@ -393,6 +396,7 @@ class ResourceServiceTest {
         assertEquals("Autoclave Model X", updated.getName());
         assertEquals(ResourceStatus.MAINTENANCE, updated.getStatus());
         assertEquals(ConditionRating.FAIR, updated.getConditionRating());
+        assertEquals(janeMembership, updated.getOwnerMembership());
     }
 
     @Test

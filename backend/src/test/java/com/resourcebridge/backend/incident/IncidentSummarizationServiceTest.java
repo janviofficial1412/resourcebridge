@@ -3,6 +3,8 @@ package com.resourcebridge.backend.incident;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,10 +66,33 @@ class IncidentSummarizationServiceTest {
         when(reportService.getAuthorizedReport(incidentId, "requester")).thenReturn(report);
         when(report.getReportText()).thenReturn("The original incident report.");
         when(summarizer.summarize("The original incident report."))
-                .thenThrow(new ResourceAccessException("test timeout"));
+                .thenThrow(new ResourceAccessException(
+                        "test timeout", new SocketTimeoutException("timed out")));
 
-        assertThrows(IncidentSummarizationService.IncidentSummarizationUnavailableException.class,
+        IncidentSummarizationService.IncidentSummarizationUnavailableException exception = assertThrows(
+                IncidentSummarizationService.IncidentSummarizationUnavailableException.class,
                 () -> service.summarize(incidentId, "requester"));
+        assertEquals("The local AI request timed out. Please retry.", exception.getMessage());
+    }
+
+    @Test
+    void connectionFailureIsDistinguishableFromTimeout() {
+        IncidentReportService reportService = mock(IncidentReportService.class);
+        OllamaIncidentSummarizer summarizer = mock(OllamaIncidentSummarizer.class);
+        IncidentSummarizationService service = new IncidentSummarizationService(reportService, summarizer);
+        IncidentReport report = mock(IncidentReport.class);
+        UUID incidentId = UUID.randomUUID();
+        when(reportService.getAuthorizedReport(incidentId, "requester")).thenReturn(report);
+        when(report.getReportText()).thenReturn("The original incident report.");
+        when(summarizer.summarize("The original incident report."))
+                .thenThrow(new ResourceAccessException("test connection", new ConnectException("refused")));
+
+        IncidentSummarizationService.IncidentSummarizationUnavailableException exception = assertThrows(
+                IncidentSummarizationService.IncidentSummarizationUnavailableException.class,
+                () -> service.summarize(incidentId, "requester"));
+        assertEquals(
+                "The local AI service could not be reached. Check the Ollama service and retry.",
+                exception.getMessage());
     }
 
     @Test

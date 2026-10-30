@@ -1,239 +1,159 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Building2, 
-  ShieldCheck, 
-  Clock, 
-  ArrowRight, 
-  CheckCircle2, 
-  Sparkles,
-  Search,
-  Activity
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Building2,
+  CalendarCheck,
+  Compass,
+  Layers,
+  ShieldCheck,
+  UsersRound,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
-export const LandingPage: React.FC = () => {
-  return (
-    <div className="space-y-20 pb-16">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-20 lg:pt-20 lg:pb-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto">
-            {/* Pill badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200/80 mb-6 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-brand-500" />
-              <span>Campus Resource Sharing Platform</span>
-              <span className="text-slate-300">•</span>
-              <span className="font-semibold">Spring Boot + React</span>
-            </div>
+const principles = [
+  {
+    icon: Building2,
+    title: 'Grounded in your institution',
+    description: 'Resources stay connected to the campus communities and memberships that make sharing possible.',
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Clear from request to handoff',
+    description: 'Availability, booking windows and owner decisions live together, so expectations are easy to follow.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Shared with care',
+    description: 'Institutional roles and approval preferences help owners share equipment and spaces responsibly.',
+  },
+];
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-[1.15]">
-              Share Institutional Equipment & Spaces <span className="text-brand-600">With Confidence</span>
-            </h1>
-
-            <p className="mt-6 text-lg sm:text-xl text-slate-600 leading-relaxed font-normal">
-              ResourceBridge connects laboratories, university makerspaces, and research departments. 
-              Discover high-value tools, reserve specialized spaces, and manage custodian handoffs within authorized campus boundaries.
-            </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link to="/register" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto" rightIcon={<ArrowRight className="h-4 w-4" />}>
-                  Create Free Account
-                </Button>
-              </Link>
-              <Link to="/discover" className="w-full sm:w-auto">
-                <Button variant="secondary" size="lg" className="w-full sm:w-auto" leftIcon={<Search className="h-4 w-4" />}>
-                  Browse Available Resources
-                </Button>
-              </Link>
-            </div>
-
-            {/* Micro assurances */}
-            <div className="mt-8 pt-6 border-t border-slate-200/60 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500 font-medium">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Session-based CSRF protection
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                PostgreSQL tenant isolation
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Append-only audit tracking
-              </span>
-            </div>
+export const LandingPage: React.FC = () => (
+  <div className="overflow-hidden">
+    <section className="relative">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_76%_22%,rgba(220,235,224,0.68),transparent_38%),linear-gradient(180deg,#faf9f6_0%,#f4f3ed_100%)]" />
+      <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:pb-28 lg:pt-24">
+        <div className="max-w-2xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/80 px-3.5 py-2 text-xs font-medium text-brand-800 shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-brand-500" />
+            A resource network for academic communities
           </div>
-        </div>
-      </section>
-
-      {/* Product Highlight / Mock Preview */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-200/50 p-6 sm:p-8 overflow-hidden">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-brand-600">Live Resource Discovery</span>
-              <h2 className="text-xl font-bold text-slate-900 mt-1">Cross-Department Campus Catalog</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Active Database Schema
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
-            {/* Card 1 */}
-            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-5 hover:bg-white hover:border-brand-200 transition-all duration-200 group">
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                  EQUIPMENT
-                </span>
-                <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                  Condition: NEW
-                </span>
-              </div>
-              <h3 className="font-semibold text-slate-900 group-hover:text-brand-600 transition-colors">
-                Prusa i3 MK3S+ 3D Printer
-              </h3>
-              <p className="text-xs text-slate-500 mt-2 line-clamp-2">
-                Located in MakerHub Room 204. High-resolution FDM printer with multi-filament support.
-              </p>
-              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
-                <span>Max: 240 mins</span>
-                <span className="font-medium text-brand-600">Requires Approval</span>
-              </div>
-            </div>
-
-            {/* Card 2 */}
-            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-5 hover:bg-white hover:border-brand-200 transition-all duration-200 group">
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                  SPACE
-                </span>
-                <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                  Condition: GOOD
-                </span>
-              </div>
-              <h3 className="font-semibold text-slate-900 group-hover:text-brand-600 transition-colors">
-                Anechoic Audio Testing Suite
-              </h3>
-              <p className="text-xs text-slate-500 mt-2 line-clamp-2">
-                Sound-dampened chamber for acoustic measurements and high-fidelity sensor calibration.
-              </p>
-              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
-                <span>Max: 480 mins</span>
-                <span className="font-medium text-emerald-600">Instant Access</span>
-              </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-5 hover:bg-white hover:border-brand-200 transition-all duration-200 group">
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                  EQUIPMENT
-                </span>
-                <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                  Condition: FAIR
-                </span>
-              </div>
-              <h3 className="font-semibold text-slate-900 group-hover:text-brand-600 transition-colors">
-                Keysight 4-Channel Oscilloscope
-              </h3>
-              <p className="text-xs text-slate-500 mt-2 line-clamp-2">
-                Electronics Bench 3. Digital storage oscilloscope with 200 MHz bandwidth.
-              </p>
-              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
-                <span>Max: 180 mins</span>
-                <span className="font-medium text-brand-600">Requires Approval</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Core Architectural Pillars */}
-      <section id="how-it-works" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
-            Engineered for Academic Trust & Security
-          </h2>
-          <p className="mt-3 text-sm sm:text-base text-slate-600">
-            Unlike commercial booking tools, ResourceBridge enforces departmental verification and multi-role custody protocols.
+          <h1 className="text-4xl font-semibold leading-[1.1] tracking-[-0.045em] text-slate-950 sm:text-5xl lg:text-[4.25rem]">
+            Good work starts with
+            <span className="block text-brand-700">what we share.</span>
+          </h1>
+          <p className="mt-6 max-w-xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+            Make campus equipment and spaces easier to find, reserve and care for. ResourceBridge brings people and underused resources together across trusted institutions.
           </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="h-10 w-10 rounded-lg bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900">Institutional Scoping</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Every resource and member belongs to a verified institution slug. Foreign keys are locked at the database tier to prevent cross-institution leaks.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="h-10 w-10 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900">Role Verification</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Granular role hierarchies: Admins, Resource Owners, Trainers, and Borrowers. Active membership requires supervisor verification timestamping.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="h-10 w-10 rounded-lg bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-              <Clock className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900">Condition & Custody</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Tracks equipment condition rating (NEW, GOOD, FAIR, POOR) and enforces maximum booking durations to eliminate hoarding.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="h-10 w-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
-              <Activity className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900">Append-Only Audit</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              PostgreSQL trigger-enforced immutable audit trail. Actions cannot be updated or deleted, guaranteeing complete accountability.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Call to Action Banner */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-gradient-to-r from-brand-900 via-brand-800 to-slate-900 rounded-2xl p-8 sm:p-12 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="space-y-3 max-w-xl">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Ready to bring ResourceBridge to your campus?
-            </h2>
-            <p className="text-sm text-brand-100 leading-relaxed">
-              Register now with your university email address. Connect with existing campus departments or register your lab space.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
-            <Link to="/register" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto bg-white text-brand-900 hover:bg-brand-50" rightIcon={<ArrowRight className="h-4 w-4 text-brand-900" />}>
-                Create Account
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link to="/register">
+              <Button size="lg" className="w-full sm:w-auto" rightIcon={<ArrowRight className="h-4 w-4" />}>
+                Join your campus
               </Button>
             </Link>
-            <Link to="/login" className="w-full sm:w-auto">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto border-brand-300 text-white hover:bg-white/10">
-                Sign In
+            <Link to="/discover">
+              <Button variant="secondary" size="lg" className="w-full sm:w-auto" leftIcon={<Compass className="h-4 w-4" />}>
+                Explore the network
               </Button>
             </Link>
           </div>
+          <div className="mt-9 flex items-center gap-3 text-sm text-slate-500">
+            <div className="flex -space-x-2" aria-hidden="true">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#f7f6f1] bg-brand-100 text-brand-800"><UsersRound className="h-4 w-4" /></span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#f7f6f1] bg-[#f3e5dc] text-[#98583f]"><Building2 className="h-4 w-4" /></span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#f7f6f1] bg-[#e8ede7] text-brand-700"><Layers className="h-4 w-4" /></span>
+            </div>
+            <span>For the people who make discovery happen.</span>
+          </div>
         </div>
-      </section>
-    </div>
-  );
-};
+
+        <div className="relative mx-auto w-full max-w-xl lg:ml-auto">
+          <div className="absolute -right-7 -top-8 h-40 w-40 rounded-full border border-brand-200/80" />
+          <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-[#ead9ce]/70 blur-2xl" />
+          <div className="relative rounded-[2rem] border border-white/80 bg-white/75 p-4 shadow-[0_32px_80px_-40px_rgba(27,56,42,0.38)] backdrop-blur">
+            <div className="rounded-[1.5rem] bg-brand-900 p-6 text-white sm:p-8">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-2 text-xs font-medium text-brand-100">
+                  <span className="h-2 w-2 rounded-full bg-[#d49a7d]" />
+                  A more connected campus
+                </span>
+                <ArrowUpRight className="h-5 w-5 text-brand-200" />
+              </div>
+              <div className="mt-12 max-w-sm">
+                <p className="text-sm font-medium text-brand-200">From a shared resource</p>
+                <h2 className="mt-3 text-3xl font-medium leading-tight tracking-tight sm:text-4xl">
+                  One useful connection can move research forward.
+                </h2>
+                <p className="mt-4 text-sm leading-6 text-brand-100/85">
+                  Find the right equipment, meet its custodian and make a plan that works for everyone.
+                </p>
+              </div>
+              <div className="mt-10 flex items-center justify-between border-t border-white/15 pt-5">
+                <span className="text-xs text-brand-200">Discover · Request · Share</span>
+                <ArrowDownRight className="h-5 w-5 text-[#d49a7d]" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-1 pt-4">
+              <div className="rounded-2xl bg-[#f4f3ed] p-4">
+                <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">For resource owners</span>
+                <p className="mt-2 text-sm font-semibold text-slate-900">Share with clarity</p>
+              </div>
+              <div className="rounded-2xl bg-[#f3e8e1] p-4">
+                <span className="text-xs font-medium uppercase tracking-[0.12em] text-[#8d604b]">For campus members</span>
+                <p className="mt-2 text-sm font-semibold text-slate-900">Find what you need</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+      <div className="grid gap-8 border-b border-[#e7e5df] pb-10 md:grid-cols-[0.8fr_1.2fr] md:items-end">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">A better way to share</p>
+          <h2 className="mt-3 max-w-md text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-4xl">
+            Make access feel as thoughtful as the work.
+          </h2>
+        </div>
+        <p className="max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
+          Equipment and specialist spaces often sit just beyond the next department. ResourceBridge helps academic communities make those connections visible and useful.
+        </p>
+      </div>
+      <div className="grid gap-4 pt-8 md:grid-cols-3">
+        {principles.map(({ icon: Icon, title, description }, index) => (
+          <article key={title} className="group rounded-2xl border border-[#e7e5df] bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5">
+            <div className="flex items-center justify-between">
+              <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${index === 1 ? 'bg-[#f3e8e1] text-[#98583f]' : 'bg-brand-50 text-brand-700'}`}>
+                <Icon className="h-5 w-5" strokeWidth={1.8} />
+              </span>
+              <span className="text-xs font-medium text-slate-400">0{index + 1}</span>
+            </div>
+            <h3 className="mt-7 text-lg font-semibold tracking-tight text-slate-900">{title}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section className="mx-auto max-w-7xl px-4 pb-20 pt-4 sm:px-6 lg:px-8 lg:pb-24">
+      <div className="relative overflow-hidden rounded-[2rem] bg-[#eee8dc] px-6 py-10 sm:px-10 sm:py-12 lg:px-14">
+        <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full border border-brand-900/10" />
+        <div className="absolute -right-1 -top-8 h-44 w-44 rounded-full border border-brand-900/10" />
+        <div className="relative flex flex-col justify-between gap-8 md:flex-row md:items-center">
+          <div className="max-w-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">Start with your community</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">There is more to discover together.</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">Create an account to find participating institutions and connect with resources shared by their members.</p>
+          </div>
+          <Link to="/register" className="shrink-0">
+            <Button size="lg" className="w-full sm:w-auto" rightIcon={<ArrowRight className="h-4 w-4" />}>Get started</Button>
+          </Link>
+        </div>
+      </div>
+    </section>
+  </div>
+);

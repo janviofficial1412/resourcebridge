@@ -82,6 +82,13 @@ public class ResourceController {
         return toResponses(resources);
     }
 
+    @GetMapping("/institution/{institutionId}")
+    public List<ResourceResponse> getInstitutionResources(@PathVariable UUID institutionId,
+                                                          Authentication authentication) {
+        String username = getAuthenticatedUsername(authentication);
+        return toResponses(resourceService.getInstitutionResources(institutionId, username));
+    }
+
     @GetMapping("/{id}")
     public ResourceResponse getResourceDetails(@PathVariable UUID id,
                                                Authentication authentication) {

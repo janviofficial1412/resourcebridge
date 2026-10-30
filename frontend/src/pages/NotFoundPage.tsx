@@ -6,8 +6,8 @@ import { Button } from '../components/ui/Button';
 export const NotFoundPage: React.FC = () => {
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
-      <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 mb-6">
-        <AlertCircle className="h-8 w-8 text-slate-400" />
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-700">
+        <AlertCircle className="h-8 w-8 text-brand-700" />
       </div>
       <h1 className="text-3xl font-bold text-slate-900 tracking-tight sm:text-4xl">
         Page Not Found

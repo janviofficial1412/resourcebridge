@@ -10,7 +10,10 @@ public record IncidentReportResponse(
         UUID reporterMembershipId,
         String reporterName,
         String reportText,
-        Instant createdAt
+        Instant createdAt,
+        String status,
+        String resolution,
+        Instant resolvedAt
 ) {
     static IncidentReportResponse from(IncidentReport report) {
         return new IncidentReportResponse(
@@ -20,6 +23,9 @@ public record IncidentReportResponse(
                 report.getReporterMembership().getId(),
                 report.getReporterMembership().getUser().getFullName(),
                 report.getReportText(),
-                report.getCreatedAt());
+                report.getCreatedAt(),
+                report.getStatus(),
+                report.getResolution(),
+                report.getResolvedAt());
     }
 }

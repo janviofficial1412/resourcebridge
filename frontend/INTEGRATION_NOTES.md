@@ -1,6 +1,6 @@
 # ResourceBridge — Backend Inspection & Integration Notes
 
-This document records the architectural findings, actual backend contracts, authentication mechanisms, and missing API endpoints discovered during the backend inspection of the ResourceBridge application.
+This document records the architectural findings, backend contracts, and authentication mechanisms for ResourceBridge. The historical inspection sections below may describe features as missing; the **Current role-based workflows** section at the end reflects the implemented API and takes precedence.
 
 ---
 
@@ -475,3 +475,47 @@ There is no dedicated human-feedback or AI-correction persistence workflow. If c
 collected later, use an opt-in, institution-authorized, append-only reviewed record and treat
 feedback as an evaluation candidate rather than ground truth. Do not send private incident content
 to external services.
+
+## 13. Current role-based workflows
+
+This section supersedes earlier statements in this document that institutions, resource operations,
+or incident workflows are not implemented.
+
+### Institution membership and roles
+
+* `GET /api/institutions` lists the caller's active institution memberships.
+  `GET /api/institutions/memberships` includes the caller's membership states, and
+  `GET /api/institutions/directory` lists active institutions available for discovery.
+* `POST /api/institutions` creates an institution and its creator's active `ADMIN` membership.
+  `POST /api/institutions/{id}/membership-request` creates a `MEMBER/PENDING` request.
+* Active institution admins can approve or reject a pending member with
+  `POST /api/institutions/{id}/members/{membershipId}/approve` or `/reject`, and deactivate an active
+  member with `DELETE /api/institutions/{id}/members/{membershipId}`.
+* `ADMIN` and `MEMBER` are institution-scoped roles; status remains independent. Institution-specific
+  services validate active membership and the required role. An institution admin in another
+  institution receives no implicit access.
+
+### Resource, booking, and dashboard permissions
+
+* Active institution admins create/manage institution resources and categories. Existing resource
+  owner membership references are preserved; the admin resource list includes legacy member-owned
+  resources without changing ownership.
+* Active members submit booking requests and can list their own bookings. Only active admins in the
+  booking's institution can list incoming requests, decide requests, or view resource booking history.
+  A rejection requires a non-blank `decisionMessage`; the API contract is unchanged. Confirmed
+  bookings past their end time display as completed without a database status migration.
+* Active admins can view an individual member's institution-scoped history at
+  `GET /api/bookings/institution/{institutionId}/member/{membershipId}`. Both the requesting admin
+  and the target membership are checked against the requested institution.
+* `GET /api/dashboard?institutionId={id}` returns database-backed metrics after checking the caller's
+  active membership and role in that institution.
+
+### Incident administration
+
+* Students can list their own reports at `GET /api/incidents/mine`; active institution admins can list
+  reports at `GET /api/institutions/{institutionId}/incidents`.
+* `PUT /api/incidents/{incidentId}` allows an active institution admin to update status and
+  resolution. `RESOLVED` and `CLOSED` require a resolution note; original report text remains
+  immutable. `POST /api/incidents/{incidentId}/summary` remains an authorized, transient AI draft
+  that does not make administrative decisions.
+* Flyway V7 adds incident status and resolution fields additively. Earlier migrations are unchanged.

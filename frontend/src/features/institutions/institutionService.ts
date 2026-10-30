@@ -3,6 +3,7 @@ import {
   InstitutionSummary,
   CreateInstitutionRequest,
   InstitutionDetail,
+  InstitutionDirectoryEntry,
   InstitutionMember,
 } from './institutionTypes';
 
@@ -12,6 +13,14 @@ export const institutionService = {
    */
   async listMyInstitutions(): Promise<InstitutionSummary[]> {
     return api.get<InstitutionSummary[]>('/api/institutions');
+  },
+
+  async listMyMemberships(): Promise<InstitutionSummary[]> {
+    return api.get<InstitutionSummary[]>('/api/institutions/memberships');
+  },
+
+  async listDirectory(): Promise<InstitutionDirectoryEntry[]> {
+    return api.get<InstitutionDirectoryEntry[]>('/api/institutions/directory');
   },
 
   /**
@@ -47,5 +56,29 @@ export const institutionService = {
    */
   async getInstitutionMembers(id: string): Promise<InstitutionMember[]> {
     return api.get<InstitutionMember[]>(`/api/institutions/${id}/members`);
+  },
+
+  async requestMembership(id: string): Promise<InstitutionMember> {
+    return api.post<InstitutionMember>(`/api/institutions/${encodeURIComponent(id)}/membership-request`, {});
+  },
+
+  async approveMembership(institutionId: string, membershipId: string): Promise<InstitutionMember> {
+    return api.post<InstitutionMember>(
+      `/api/institutions/${encodeURIComponent(institutionId)}/members/${encodeURIComponent(membershipId)}/approve`,
+      {}
+    );
+  },
+
+  async rejectMembership(institutionId: string, membershipId: string): Promise<InstitutionMember> {
+    return api.post<InstitutionMember>(
+      `/api/institutions/${encodeURIComponent(institutionId)}/members/${encodeURIComponent(membershipId)}/reject`,
+      {}
+    );
+  },
+
+  async deactivateMembership(institutionId: string, membershipId: string): Promise<InstitutionMember> {
+    return api.delete<InstitutionMember>(
+      `/api/institutions/${encodeURIComponent(institutionId)}/members/${encodeURIComponent(membershipId)}`
+    );
   },
 };

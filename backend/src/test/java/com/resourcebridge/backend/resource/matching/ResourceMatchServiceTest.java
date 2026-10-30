@@ -23,6 +23,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.InputStream;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -230,7 +233,7 @@ class ResourceMatchServiceTest {
     }
 
     @Test
-    void incompleteOllamaRankingFallsBackInsteadOfReturningPartialAiResults() {
+    void acceptsOllamaRankingThatListsOnlyRelevantCandidates() {
         when(ollamaClient.rank(any(), any())).thenReturn("""
                 {"matches":[
                   {"id":"%s","relevant":true,"evidence":"Laptop suitable for Python development"}
@@ -241,13 +244,14 @@ class ResourceMatchServiceTest {
                 new ResourceMatchRequest("laptop Python", null, null, null, null, null, null),
                 "requester");
 
-        assertEquals(ResourceMatchResponse.RankingMethod.DETERMINISTIC, response.rankingMethod());
+        assertEquals(ResourceMatchResponse.RankingMethod.AI, response.rankingMethod());
         assertEquals(laptop.getId(), response.matches().getFirst().resource().id());
     }
 
     @Test
     void ollamaResponseTimeoutUsesDeterministicFallback() {
-        when(ollamaClient.rank(any(), any())).thenThrow(new ResourceAccessException("response timeout"));
+        when(ollamaClient.rank(any(), any())).thenThrow(
+                new ResourceAccessException("response timeout", new SocketTimeoutException("timed out")));
 
         ResourceMatchResponse response = service.match(
                 new ResourceMatchRequest("laptop Python", institutionId, null, null, null, null, null),
@@ -255,6 +259,23 @@ class ResourceMatchServiceTest {
 
         assertEquals(ResourceMatchResponse.RankingMethod.DETERMINISTIC, response.rankingMethod());
         assertEquals(laptop.getId(), response.matches().getFirst().resource().id());
+    }
+
+    @Test
+    void fallbackMessagesDistinguishAiTimeoutFromConnectionFailure() {
+        when(ollamaClient.rank(any(), any()))
+                .thenThrow(new ResourceAccessException("timeout", new SocketTimeoutException("timed out")));
+        ResourceMatchResponse timeoutResponse = service.match(
+                new ResourceMatchRequest("laptop Python", institutionId, null, null, null, null, null),
+                "requester");
+        assertTrue(timeoutResponse.message().contains("Local AI ranking timed out"));
+
+        doThrow(new ResourceAccessException("connection failed", new ConnectException("refused")))
+                .when(ollamaClient).rank(any(), any());
+        ResourceMatchResponse connectionResponse = service.match(
+                new ResourceMatchRequest("laptop Python", institutionId, null, null, null, null, null),
+                "requester");
+        assertTrue(connectionResponse.message().contains("local AI service could not be reached"));
     }
 
     @Test

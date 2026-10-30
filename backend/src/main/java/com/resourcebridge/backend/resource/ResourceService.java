@@ -68,8 +68,9 @@ public class ResourceService {
             throw new ResourceAccessDeniedException("Your membership in this institution is not active");
         }
 
-        if ("BORROWER".equalsIgnoreCase(ownerMembership.getRole())) {
-            throw new ResourceAccessDeniedException("Borrowers cannot register resources");
+        if (!"ADMIN".equalsIgnoreCase(ownerMembership.getRole())) {
+            throw new ResourceAccessDeniedException(
+                    "Only an active institution administrator can register resources");
         }
 
         ResourceCategory category = resourceCategoryRepository.findById(command.categoryId())
@@ -120,6 +121,13 @@ public class ResourceService {
         verifyActiveMembership(user.getId(), institutionId);
 
         return resourceRepository.findByInstitutionIdAndOwnerUserIdWithDetails(institutionId, user.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Resource> getInstitutionResources(UUID institutionId, String currentUsername) {
+        AppUser user = getAuthenticatedUser(currentUsername);
+        verifyActiveAdmin(user.getId(), institutionId);
+        return resourceRepository.findByInstitutionIdWithDetails(institutionId);
     }
 
     @Transactional(readOnly = true)
@@ -295,17 +303,16 @@ public class ResourceService {
     }
 
     private void verifyCanModifyResource(AppUser user, Resource resource) {
-        Membership membership = membershipRepository
-                .findByUser_IdAndInstitution_Id(user.getId(), resource.getInstitution().getId())
-                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus()))
-                .orElseThrow(() -> new ResourceAccessDeniedException(
-                        "You need an active membership in this institution to modify this resource"));
+        verifyActiveAdmin(user.getId(), resource.getInstitution().getId());
+    }
 
-        boolean isOwner = resource.getOwnerMembership().getId().equals(membership.getId());
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(membership.getRole());
-        if (!isOwner && !isAdmin) {
-            throw new ResourceAccessDeniedException("You do not have permission to modify or delete this resource");
-        }
+    private Membership verifyActiveAdmin(UUID userId, UUID institutionId) {
+        Membership membership = membershipRepository.findByUser_IdAndInstitution_Id(userId, institutionId)
+                .filter(m -> "ACTIVE".equalsIgnoreCase(m.getStatus())
+                        && "ADMIN".equalsIgnoreCase(m.getRole()))
+                .orElseThrow(() -> new ResourceAccessDeniedException(
+                        "Only an active administrator of this institution can manage its resources"));
+        return membership;
     }
 
     private AppUser getAuthenticatedUser(String username) {

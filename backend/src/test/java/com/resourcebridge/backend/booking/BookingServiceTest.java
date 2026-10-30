@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -388,10 +389,12 @@ class BookingServiceTest {
         Booking details = bookingService.getBookingDetails(bookingId, "bob_requester");
         assertNotNull(details);
 
-        // Owner access
+        // Resource ownership alone does not grant access.
         when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
-        details = bookingService.getBookingDetails(bookingId, "alice_owner");
-        assertNotNull(details);
+        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(ownerMembership));
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.getBookingDetails(bookingId, "alice_owner"));
 
         // Admin access
         when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
@@ -420,16 +423,11 @@ class BookingServiceTest {
     }
 
     @Test
-    void getIncomingBookingsReturnsOwnerBookings() {
+    void getIncomingBookingsDoesNotReturnBookingsForResourceOwners() {
         when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
 
-        Booking b = new Booking(institution, approvalRequiredResource, requesterMembership,
-                Instant.now(), Instant.now().plusSeconds(3600), "Incoming");
-        when(bookingRepository.findIncomingByOwnerUserIdAndStatusWithDetails(ownerUser.getId(), null))
-                .thenReturn(List.of(b));
-
         List<Booking> incoming = bookingService.getIncomingBookings(null, null, "alice_owner");
-        assertEquals(1, incoming.size());
+        assertEquals(0, incoming.size());
     }
 
     @Test
@@ -453,6 +451,67 @@ class BookingServiceTest {
                 BookingService.BookingAccessDeniedException.class,
                 () -> bookingService.getIncomingBookings(null, instId, "bob_requester")
         );
+    }
+
+    @Test
+    void resourceBookingHistoryRequiresActiveAdministratorMembership() {
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
+        when(resourceRepository.findByIdWithDetails(resourceId)).thenReturn(Optional.of(approvalRequiredResource));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
+        when(bookingRepository.findByResourceIdWithDetails(resourceId)).thenReturn(List.of());
+
+        assertEquals(0, bookingService.getResourceBookingHistory(resourceId, "charlie_admin").size());
+        verify(bookingRepository).findByResourceIdWithDetails(resourceId);
+
+        when(appUserRepository.findByUsername("bob_requester")).thenReturn(Optional.of(requesterUser));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(requesterUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(requesterMembership));
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.getResourceBookingHistory(resourceId, "bob_requester"));
+    }
+
+    @Test
+    void memberBookingHistoryIsInstitutionAdminScoped() {
+        UUID memberMembershipId = UUID.randomUUID();
+        ReflectionTestUtils.setField(requesterMembership, "id", memberMembershipId);
+        Booking booking = new Booking(institution, approvalRequiredResource, requesterMembership,
+                Instant.now(), Instant.now().plusSeconds(3600), null);
+
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
+        when(membershipRepository.findByIdAndInstitution_Id(memberMembershipId, institution.getId()))
+                .thenReturn(Optional.of(requesterMembership));
+        when(bookingRepository.findByInstitutionIdAndRequesterMembershipIdWithDetails(
+                institution.getId(), memberMembershipId)).thenReturn(List.of(booking));
+
+        assertEquals(List.of(booking), bookingService.getMemberBookingHistory(
+                institution.getId(), memberMembershipId, "charlie_admin"));
+        verify(bookingRepository).findByInstitutionIdAndRequesterMembershipIdWithDetails(
+                institution.getId(), memberMembershipId);
+    }
+
+    @Test
+    void memberBookingHistoryRejectsNonAdminAndCrossInstitutionMembership() {
+        UUID memberMembershipId = UUID.randomUUID();
+        when(appUserRepository.findByUsername("bob_requester")).thenReturn(Optional.of(requesterUser));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(requesterUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(requesterMembership));
+        assertThrows(BookingService.BookingAccessDeniedException.class,
+                () -> bookingService.getMemberBookingHistory(
+                        institution.getId(), memberMembershipId, "bob_requester"));
+
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
+        when(membershipRepository.findByIdAndInstitution_Id(memberMembershipId, institution.getId()))
+                .thenReturn(Optional.empty());
+        assertThrows(BookingService.BookingNotFoundException.class,
+                () -> bookingService.getMemberBookingHistory(
+                        institution.getId(), memberMembershipId, "charlie_admin"));
+        verify(bookingRepository, never()).findByInstitutionIdAndRequesterMembershipIdWithDetails(
+                institution.getId(), memberMembershipId);
     }
 
     @Test
@@ -480,18 +539,18 @@ class BookingServiceTest {
         Booking booking = new Booking(institution, approvalRequiredResource, requesterMembership, start, end, null);
         ReflectionTestUtils.setField(booking, "id", bookingId);
 
-        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
         when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
-        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
-                .thenReturn(Optional.of(ownerMembership));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
         when(bookingRepository.countOverlappingActiveBookings(resourceId, start, end, bookingId)).thenReturn(0L);
         when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Booking approved = bookingService.approveBooking(bookingId, "Approved by Alice", "alice_owner");
+        Booking approved = bookingService.approveBooking(bookingId, "Approved by Alice", "charlie_admin");
 
         assertEquals(BookingStatus.CONFIRMED, approved.getStatus());
         assertEquals("Approved by Alice", approved.getDecisionMessage());
-        assertEquals(ownerMembership, approved.getDecidedByMembership());
+        assertEquals(adminMembership, approved.getDecidedByMembership());
         assertNotNull(approved.getDecidedAt());
     }
 
@@ -526,17 +585,17 @@ class BookingServiceTest {
         Booking booking = new Booking(institution, approvalRequiredResource, requesterMembership, start, end, null);
         ReflectionTestUtils.setField(booking, "id", bookingId);
 
-        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
         when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
-        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
-                .thenReturn(Optional.of(ownerMembership));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
 
         // Another booking was confirmed in the meantime!
         when(bookingRepository.countOverlappingActiveBookings(resourceId, start, end, bookingId)).thenReturn(1L);
 
         BookingService.BookingConflictException ex = assertThrows(
                 BookingService.BookingConflictException.class,
-                () -> bookingService.approveBooking(bookingId, "Approve", "alice_owner")
+                () -> bookingService.approveBooking(bookingId, "Approve", "charlie_admin")
         );
         assertEquals("Cannot approve booking: time interval conflicts with another active booking", ex.getMessage());
     }
@@ -549,14 +608,14 @@ class BookingServiceTest {
         booking.setStatus(BookingStatus.CONFIRMED);
         ReflectionTestUtils.setField(booking, "id", bookingId);
 
-        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
         when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
-        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
-                .thenReturn(Optional.of(ownerMembership));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
 
         BookingService.BookingValidationException ex = assertThrows(
                 BookingService.BookingValidationException.class,
-                () -> bookingService.approveBooking(bookingId, null, "alice_owner")
+                () -> bookingService.approveBooking(bookingId, null, "charlie_admin")
         );
         assertEquals("Only PENDING bookings can be approved. Current status: CONFIRMED", ex.getMessage());
     }
@@ -610,18 +669,44 @@ class BookingServiceTest {
                 Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), null);
         ReflectionTestUtils.setField(booking, "id", bookingId);
 
-        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
         when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
-        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
-                .thenReturn(Optional.of(ownerMembership));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
         when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Booking rejected = bookingService.rejectBooking(bookingId, "Sensor calibration scheduled", "alice_owner");
+        Booking rejected = bookingService.rejectBooking(bookingId, "Sensor calibration scheduled", "charlie_admin");
 
         assertEquals(BookingStatus.REJECTED, rejected.getStatus());
         assertEquals("Sensor calibration scheduled", rejected.getDecisionMessage());
-        assertEquals(ownerMembership, rejected.getDecidedByMembership());
+        assertEquals(adminMembership, rejected.getDecidedByMembership());
         assertNotNull(rejected.getDecidedAt());
+    }
+
+    @Test
+    void rejectBookingRequiresNonBlankDecisionReason() {
+        UUID bookingId = UUID.randomUUID();
+        Booking booking = new Booking(institution, approvalRequiredResource, requesterMembership,
+                Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), null);
+        ReflectionTestUtils.setField(booking, "id", bookingId);
+
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
+        when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
+
+        BookingService.BookingValidationException missingReason = assertThrows(
+                BookingService.BookingValidationException.class,
+                () -> bookingService.rejectBooking(bookingId, null, "charlie_admin")
+        );
+        assertEquals("A reason is required to reject a booking", missingReason.getMessage());
+
+        BookingService.BookingValidationException blankReason = assertThrows(
+                BookingService.BookingValidationException.class,
+                () -> bookingService.rejectBooking(bookingId, "  \t ", "charlie_admin")
+        );
+        assertEquals("A reason is required to reject a booking", blankReason.getMessage());
+        verify(bookingRepository, never()).saveAndFlush(any(Booking.class));
     }
 
     @Test
@@ -632,14 +717,14 @@ class BookingServiceTest {
         booking.setStatus(BookingStatus.CANCELLED);
         ReflectionTestUtils.setField(booking, "id", bookingId);
 
-        when(appUserRepository.findByUsername("alice_owner")).thenReturn(Optional.of(ownerUser));
+        when(appUserRepository.findByUsername("charlie_admin")).thenReturn(Optional.of(adminUser));
         when(bookingRepository.findByIdWithDetails(bookingId)).thenReturn(Optional.of(booking));
-        when(membershipRepository.findByUser_IdAndInstitution_Id(ownerUser.getId(), institution.getId()))
-                .thenReturn(Optional.of(ownerMembership));
+        when(membershipRepository.findByUser_IdAndInstitution_Id(adminUser.getId(), institution.getId()))
+                .thenReturn(Optional.of(adminMembership));
 
         BookingService.BookingValidationException ex = assertThrows(
                 BookingService.BookingValidationException.class,
-                () -> bookingService.rejectBooking(bookingId, null, "alice_owner")
+                () -> bookingService.rejectBooking(bookingId, null, "charlie_admin")
         );
         assertEquals("Only PENDING bookings can be rejected. Current status: CANCELLED", ex.getMessage());
     }

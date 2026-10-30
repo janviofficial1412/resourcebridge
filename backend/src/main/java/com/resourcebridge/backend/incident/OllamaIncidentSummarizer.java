@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Component
 public class OllamaIncidentSummarizer {
@@ -47,7 +48,7 @@ public class OllamaIncidentSummarizer {
                 .body(Map.of(
                         "model", model,
                         "stream", false,
-                        "format", "json",
+                        "format", summarySchema(),
                         "options", Map.of("temperature", 0, "num_predict", 1024),
                         "messages", List.of(
                                 Map.of("role", "system", "content", systemPrompt()),
@@ -61,6 +62,18 @@ public class OllamaIncidentSummarizer {
             throw new InvalidIncidentSummaryException();
         }
         return parse(content.asText(), reportText);
+    }
+
+    private static java.util.Map<String, Object> summarySchema() {
+        Map<String, Object> fields = FIELDS.stream()
+                .collect(Collectors.toMap(
+                        field -> field,
+                        field -> Map.of("type", "string", "maxLength", 800)));
+        return Map.of(
+                "type", "object",
+                "properties", fields,
+                "required", FIELDS,
+                "additionalProperties", false);
     }
 
     private IncidentSummaryFields parse(String json, String reportText) {

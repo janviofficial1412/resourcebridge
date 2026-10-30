@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -8,13 +8,18 @@ import {
   UserCheck,
   Layers,
   LogOut,
-  ShieldCheck,
   ChevronRight,
   CalendarCheck,
   Inbox,
+  FileText,
+  Users,
+  Settings,
+  SearchCheck,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
+import { institutionService } from '../../features/institutions/institutionService';
 
 export interface SidebarProps {
   onNavigate?: () => void;
@@ -25,8 +30,6 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
-  badge?: string;
-  badgeType?: 'info' | 'roadmap';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) => {
@@ -34,6 +37,36 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [hasAdminMembership, setHasAdminMembership] = useState(false);
+  const [adminInstitutionId, setAdminInstitutionId] = useState<string | null>(null);
+  const [memberInstitutionId, setMemberInstitutionId] = useState<string | null>(null);
+  const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    institutionService.listMyInstitutions()
+      .then((institutions) => {
+        if (active) {
+          const admin = institutions.find((institution) => institution.role === 'ADMIN');
+          const member = institutions.find((institution) => institution.role === 'MEMBER');
+          setHasAdminMembership(Boolean(admin));
+          setAdminInstitutionId(admin?.id ?? null);
+          setMemberInstitutionId(member?.id ?? null);
+          setMembershipLoadError(null);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setHasAdminMembership(false);
+          setMembershipLoadError(cause instanceof Error
+            ? cause.message
+            : 'Could not load institution permissions.');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -56,33 +89,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
       path: '/dashboard',
       icon: <LayoutDashboard className="h-4 w-4" />,
     },
+    ...(hasAdminMembership ? [
+      { label: 'Resources', path: '/my-resources', icon: <Briefcase className="h-4 w-4" /> },
+      { label: 'Booking Requests', path: '/bookings/incoming', icon: <Inbox className="h-4 w-4" /> },
+      { label: 'Matching', path: '/discover#matching', icon: <SearchCheck className="h-4 w-4" /> },
+      ...(adminInstitutionId ? [
+        { label: 'Incident Reports', path: `/institutions/${adminInstitutionId}#incidents`, icon: <FileText className="h-4 w-4" /> },
+        { label: 'Students', path: `/institutions/${adminInstitutionId}#members`, icon: <Users className="h-4 w-4" /> },
+        { label: 'Institution Settings', path: `/institutions/${adminInstitutionId}#settings`, icon: <Settings className="h-4 w-4" /> },
+      ] : []),
+      { label: 'Institutions', path: '/institutions', icon: <Building2 className="h-4 w-4" /> },
+    ] : []),
+    ...(memberInstitutionId ? [
+      { label: 'Discover Resources', path: '/discover', icon: <Compass className="h-4 w-4" /> },
+      { label: 'Find Matches', path: '/discover#matching', icon: <SearchCheck className="h-4 w-4" /> },
+      { label: 'My Bookings', path: '/bookings', icon: <CalendarCheck className="h-4 w-4" /> },
+      ...(memberInstitutionId ? [
+        { label: 'Report Incident', path: `/institutions/${memberInstitutionId}#incident-report-text`, icon: <FileText className="h-4 w-4" /> },
+        { label: 'My Reports', path: `/institutions/${memberInstitutionId}#my-reports`, icon: <ClipboardList className="h-4 w-4" /> },
+      ] : []),
+    ] : []),
+    ...(hasAdminMembership || memberInstitutionId
+      ? []
+      : [{ label: 'Institutions', path: '/institutions', icon: <Building2 className="h-4 w-4" /> }]),
     {
-      label: 'Discover Resources',
-      path: '/discover',
-      icon: <Compass className="h-4 w-4" />,
-    },
-    {
-      label: 'My Bookings',
-      path: '/bookings',
-      icon: <CalendarCheck className="h-4 w-4" />,
-    },
-    {
-      label: 'Incoming Requests',
-      path: '/bookings/incoming',
-      icon: <Inbox className="h-4 w-4" />,
-    },
-    {
-      label: 'Institutions',
-      path: '/institutions',
-      icon: <Building2 className="h-4 w-4" />,
-    },
-    {
-      label: 'My Resources',
-      path: '/my-resources',
-      icon: <Briefcase className="h-4 w-4" />,
-    },
-    {
-      label: 'Profile & Session',
+      label: 'Your profile',
       path: '/profile',
       icon: <UserCheck className="h-4 w-4" />,
     },
@@ -92,39 +123,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
 
   return (
     <aside
-      className={`flex flex-col h-full bg-white border-r border-slate-200/90 text-slate-700 select-none ${className}`}
+      className={`flex h-full flex-col border-r border-[#e7e5df] bg-[#f7f6f1] text-slate-700 ${className}`}
       aria-label="Application sidebar navigation"
     >
       {/* Brand Logo Header */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-200/80">
+      <div className="flex h-[4.5rem] items-center border-b border-[#e7e5df] px-5">
         <Link
           to="/dashboard"
           onClick={onNavigate}
           className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"
         >
-          <div className="h-8 w-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm shadow-brand-500/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-800 text-white shadow-sm">
             <Layers className="h-4 w-4" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-900 text-sm tracking-tight">ResourceBridge</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-brand-50 text-brand-700 border border-brand-200">
-                SaaS
-              </span>
+              <span className="font-semibold text-slate-900 text-sm tracking-tight">ResourceBridge</span>
             </div>
-            <span className="text-[11px] text-slate-400 font-medium">Campus Exchange</span>
+            <span className="text-[11px] text-slate-500 font-medium">Campus resource network</span>
           </div>
         </Link>
       </div>
 
       {/* Main Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main menu">
-        <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Navigation
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-6" aria-label="Main menu">
+        <div className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          Workspace
         </div>
+        {membershipLoadError && (
+          <p role="alert" className="mx-2 mb-3 rounded-lg bg-rose-50 px-2.5 py-2 text-[11px] text-rose-700">
+            {membershipLoadError}
+          </p>
+        )}
 
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const [itemPath, itemHash] = item.path.split('#');
+          const isActive = (location.pathname === itemPath
+            && (itemHash ? location.hash === `#${itemHash}` : !location.hash)) ||
+            (item.path === '/discover' && location.pathname.startsWith('/resources/')) ||
+            (itemPath === '/institutions' && location.pathname.startsWith('/institutions/'));
 
           return (
             <Link
@@ -132,30 +169,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
               to={item.path}
               onClick={onNavigate}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+              className={`group flex items-center justify-between rounded-xl px-3 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                 isActive
-                  ? 'bg-brand-50 text-brand-700 font-semibold'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-white text-brand-800 font-semibold shadow-sm ring-1 ring-brand-100'
+                  : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className={isActive ? 'text-brand-600' : 'text-slate-400'}>
+                <span className={isActive ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}>
                   {item.icon}
                 </span>
                 <span>{item.label}</span>
               </div>
 
-              {item.badge ? (
-                <span
-                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${
-                    item.badgeType === 'roadmap'
-                      ? 'bg-slate-100 text-slate-600 border-slate-200'
-                      : 'bg-brand-50 text-brand-600 border-brand-200'
-                  }`}
-                >
-                  {item.badge}
-                </span>
-              ) : isActive ? (
+              {isActive ? (
                 <ChevronRight className="h-3.5 w-3.5 text-brand-500" />
               ) : null}
             </Link>
@@ -163,22 +190,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
         })}
       </nav>
 
-      {/* Session Security Details Badge */}
-      <div className="px-4 py-3 mx-3 my-2 rounded-lg bg-slate-50 border border-slate-200/80">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-700 mb-1">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-          <span>Spring Security Active</span>
-        </div>
-        <p className="text-[10px] text-slate-500 leading-relaxed">
-          Stateful <code className="bg-slate-200/60 px-1 py-0.5 rounded">JSESSIONID</code> & CSRF protected.
-        </p>
-      </div>
-
       {/* User Footer Profile & Sign Out */}
-      <div className="p-3 border-t border-slate-200/80 bg-slate-50/50">
-        <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white border border-slate-200 shadow-sm mb-2">
+      <div className="border-t border-[#e7e5df] p-3">
+        <Link to="/profile" onClick={onNavigate} className="mb-2 flex items-center gap-2.5 rounded-xl p-2 transition-colors hover:bg-white">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs shrink-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800">
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
@@ -190,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate, className = '' }) 
               </p>
             </div>
           </div>
-        </div>
+        </Link>
 
         <Button
           variant="ghost"
