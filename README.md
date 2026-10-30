@@ -6,7 +6,7 @@ ResourceBridge connects educational institutions, allowing them to discover, sha
 
 ## Live Demo
 
-**Frontend:** `https://resourcebridge-jwpx-2v5o0o7rx-janvi-fe7d.vercel.app/`
+**Frontend:** https://resourcebridge-jwpx-2v5o0o7rx-janvi-fe7d.vercel.app/
 
 **Backend:** https://resourcebridge-hl2y.onrender.com
 
